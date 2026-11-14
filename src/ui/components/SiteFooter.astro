@@ -1,0 +1,63 @@
+---
+import Logo from './Logo.astro';
+import { COPYRIGHT_YEAR, DISCLAIMER, ECOSYSTEM, ENGINE, SITE, TOOLS, TOOL_ORDER } from '../../seo/site';
+---
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <Logo size={26} class="brand__mark" />
+          <span>Geodesia</span>
+        </a>
+        <p>
+          Surveying and geospatial instruments that run entirely in your browser. Deterministic
+          geodesic maths on WGS 84, exports you can file, and nothing uploaded to a server.
+        </p>
+        <p class="mono" style="font-size: var(--text-2xs); color: var(--fg-faint); letter-spacing: 0.06em;">
+          {ENGINE.ellipsoid}
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h2>Instruments</h2>
+        <ul>
+          {
+            TOOL_ORDER.map((id) => (
+              <li>
+                <a href={TOOLS[id].path}>{TOOLS[id].name}</a>
+              </li>
+            ))
+          }
+          <li><a href="/#ecosystem">Ecosystem directory</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>Ecosystem</h2>
+        <ul>
+          {
+            ECOSYSTEM.filter((app) => !app.internal).map((app) => (
+              <li>
+                <a href={app.url} rel="noopener">{app.name}</a>
+              </li>
+            ))
+          }
+          <li><a href="/about">Method &amp; standards</a></li>
+          <li><a href={`mailto:${SITE.email}`}>Contact</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="body-sm" style="max-width: 78ch; margin-top: var(--s-8); color: var(--fg-faint);">
+      {DISCLAIMER}
+    </p>
+
+    <div class="footer-bottom">
+      <span>© {COPYRIGHT_YEAR} {SITE.name} · {SITE.domain}</span>
+      <span>Client-side execution · {ENGINE.datum} · No tracking scripts</span>
+      <span><a href="/#ecosystem">Directory</a> · <a href="/about">About</a> · <a href={`mailto:${SITE.email}`}>Support</a></span>
+    </div>
+  </div>
+</footer>

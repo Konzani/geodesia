@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+dist/
+.vercel/
+.astro/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.production
+.env.local
+
+# editor / os
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# test + scratch
+coverage/
+scripts/.tmp/
+*.local

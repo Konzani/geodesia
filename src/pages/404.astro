@@ -1,0 +1,38 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { TOOLS, TOOL_ORDER } from '../seo/site';
+---
+
+<BaseLayout
+  title="Page not found — Geodesia"
+  description="That route does not exist. The Geodesia instruments are Terrain Profile, Polygon Area & Coordinate Engine and the Land Area Unit Converter."
+  noindex
+>
+  <section class="section container" style="min-height: 52vh; display: grid; align-content: center;">
+    <p class="eyebrow">Error 404</p>
+    <h1 class="hero__title" style="font-size: var(--text-3xl); max-width: 22ch; margin-block: var(--s-5);">
+      Page not found
+    </h1>
+    <p class="lede">
+      This line does not close. The route you asked for is not part of this build — every
+      instrument is reachable from the workspace, and the methods are documented in full.
+    </p>
+    <div class="hero__actions">
+      <a class="btn btn--primary" href="/">Return to the workspace</a>
+      <a class="btn" href="/#method">Read the methods</a>
+    </div>
+    <div class="grid-2" style="margin-top: var(--s-10);">
+      {
+        TOOL_ORDER.map((id, index) => (
+          <a class="app-card" href={TOOLS[id].path} style="text-decoration: none;">
+            <div class="app-card__top">
+              <h2 class="app-card__title">{TOOLS[id].name}</h2>
+              <span class="mono faint">0{index + 1}</span>
+            </div>
+            <p class="app-card__desc">{TOOLS[id].blurb}</p>
+          </a>
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>

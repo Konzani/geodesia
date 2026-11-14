@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="rgba(11,15,14,0.045)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#F6F3EC"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <rect x="28.5" y="28.5" width="1143" height="573" fill="none" stroke="rgba(11,15,14,0.14)"/>
+
+  <image href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0iZ3NNYXJrVGl0bGUiPgogIDx0aXRsZSBpZD0iZ3NNYXJrVGl0bGUiPkdlb2Rlc2lhIGNoYW5uZWwgbWFyazwvdGl0bGU+CiAgPCEtLQogICAgR0VPREVTSUEgQ0hBTk5FTCBNQVJLIOKAlCAiVHJpZ29uIgogICAgQSBjYXJ0b2dyYXBoaWMgdHJpYW5ndWxhdGlvbi1zdGF0aW9uIHN5bWJvbCAodHJpYW5nbGUgd2l0aCBhIHN0YXRpb24gZG90KSwKICAgIHNldCBvbiBhIGJhc2FsdCB0aWxlIHdpdGggYSBoYWlybGluZSBncmF0aWN1bGUuIFR3byBjb2xvdXJzIG9ubHkuCiAgICBHZW9tZXRyaWNhbGx5IGNvbnN0cnVjdGVkIG9uIGEgNDgtdW5pdCBncmlkOiBhcGV4IDI0LDExIMK3IGJhc2UgMTEuNeKAkzM2LjUsMzYKICAtLT4KICA8cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHJ4PSIxMCIgZmlsbD0iIzBFMTQxMyIvPgoKICA8IS0tIGdyYXRpY3VsZSAobWVyaWRpYW5zICsgcGFyYWxsZWxzKSwgOSUgb3BhY2l0eTogcmVhZHMgYXMgbWFwIGdyYXRpY3VsZSwgdmFuaXNoZXMgYXQgMTZweCAtLT4KICA8ZyBzdHJva2U9IiNGNkYzRUMiIHN0cm9rZS1vcGFjaXR5PSIwLjEwIiBzdHJva2Utd2lkdGg9IjEiIHN0cm9rZS1saW5lY2FwPSJzcXVhcmUiPgogICAgPHBhdGggZD0iTTE2IDlWMzkiIC8+CiAgICA8cGF0aCBkPSJNMzIgOVYzOSIgLz4KICAgIDxwYXRoIGQ9Ik05IDE2SDM5IiAvPgogICAgPHBhdGggZD0iTTkgMzJIMzkiIC8+CiAgPC9nPgoKICA8IS0tIHRyaWdvbiAtLT4KICA8cGF0aCBkPSJNMjQgMTEgTDM2LjUgMzYgSDExLjUgWiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRjZGM0VDIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz4KCiAgPCEtLSBzdGF0aW9uIGRvdCAocHJpbmNpcGFsIGFjY2VudCkgLS0+CiAgPGNpcmNsZSBjeD0iMjQiIGN5PSIyOC4yIiByPSIzLjYiIGZpbGw9IiNDMDQ1MUUiLz4KPC9zdmc+Cg==" x="86" y="78" width="54" height="54"/>
+  <text x="154" y="116" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="32" font-weight="600" letter-spacing="-0.8" fill="#0E1413">Geodesia</text>
+  <line x1="322" y1="92" x2="322" y2="112" stroke="rgba(11,15,14,0.22)"/>
+  <text x="338" y="109" font-family="Consolas, monospace" font-size="10.5" letter-spacing="1.7" fill="#4B5C55">SPATIAL INSTRUMENTS</text>
+  <text x="1114" y="97" font-family="Consolas, monospace" font-size="10.5" letter-spacing="1.5" text-anchor="end" fill="#68796F">WGS 84 · CLIENT-SIDE EXECUTION</text>
+
+  <text x="86" y="262" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="52" font-weight="600" letter-spacing="-2" fill="#0E1413">Terrain. Area. Units.</text>
+  <text x="86" y="326" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="52" font-weight="600" letter-spacing="-2" fill="#C0451E">Computed in the browser.</text>
+  <text x="86" y="384" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="17" fill="#35443F">Elevation cross-sections, parcel areas from coordinates, and cadastral</text>
+  <text x="86" y="409" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="17" fill="#35443F">unit conversion. Verified geodesic maths, CSV/JSON/PDF, no account.</text>
+
+  <g transform="translate(700,316)">
+    <text x="0" y="-6" font-family="Consolas, monospace" font-size="9" letter-spacing="1.4" fill="#68796F">FIG. 1 — CROSS-SECTION</text>
+    <g stroke="rgba(11,15,14,0.09)" stroke-width="1">
+      <line x1="0" y1="34" x2="414" y2="34"/><line x1="0" y1="72" x2="414" y2="72"/>
+      <line x1="0" y1="110" x2="414" y2="110"/><line x1="0" y1="148" x2="414" y2="148"/>
+    </g>
+    <path d="M0 148 L22 140 L44 142 L66 130 L88 118 L110 97 L132 90 L154 76 L176 61 L198 40 L216 24 L238 42 L260 55 L282 69 L304 82 L326 94 L348 106 L370 117 L392 122 L414 127 L414 178 L0 178 Z" fill="rgba(46,111,104,0.12)"/>
+    <path d="M0 148 L22 140 L44 142 L66 130 L88 118 L110 97 L132 90 L154 76 L176 61 L198 40 L216 24 L238 42 L260 55 L282 69 L304 82 L326 94 L348 106 L370 117 L392 122 L414 127" fill="none" stroke="#2E6F68" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="216" cy="24" r="4" fill="#C0451E"/>
+    <line x1="216" y1="18" x2="216" y2="4" stroke="#C0451E"/>
+    <text x="230" y="8" font-family="Consolas, monospace" font-size="9" letter-spacing="1" fill="#C0451E">2148 m</text>
+    <line x1="0" y1="178" x2="414" y2="178" stroke="rgba(11,15,14,0.32)"/>
+  </g>
+
+  <line x1="86" y1="512" x2="1114" y2="512" stroke="rgba(11,15,14,0.14)"/>
+  <g font-family="Consolas, monospace" font-size="11" letter-spacing="1.2" fill="#26322E">
+    <text x="86" y="540"><tspan fill="#C0451E">01</tspan>  TERRAIN PROFILE</text>
+    <text x="286" y="540"><tspan fill="#C0451E">02</tspan>  POLYGON AREA</text>
+    <text x="476" y="540"><tspan fill="#C0451E">03</tspan>  LAND UNITS</text>
+    <text x="1114" y="540" text-anchor="end" letter-spacing="1.0" fill="#0E1413">geodesia.online</text>
+  </g>
+</svg>

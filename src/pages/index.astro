@@ -1,0 +1,348 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import TerrainGlyph from '../ui/components/TerrainGlyph.astro';
+import Workspace from '../ui/tools/Workspace.tsx';
+import HubFilter from '../ui/hub/HubFilter.tsx';
+import { ENGINE, SITE, TOOLS, TOOL_ORDER } from '../seo/site';
+import {
+  faqSchema,
+  methodArticleSchema,
+  organizationSchema,
+  toolListSchema,
+  toolSchema,
+  websiteSchema,
+} from '../seo/schema';
+
+const title = 'Geodesia — Land Surveying Calculators for Terrain, Area & Units';
+const description =
+  'Elevation profiles, polygon area from coordinates and land unit conversion — client-side surveying instruments on WGS 84 with CSV, JSON and PDF export.';
+
+const faqs = [
+  {
+    q: 'Is Geodesia free, and do I need an account?',
+    a: 'Yes to both: every instrument is free to use and there is no account, sign-in or email gate. The tools run entirely in the browser tab, so there is no usage limit to meter and nothing to subscribe to.',
+  },
+  {
+    q: 'Where does my survey data go?',
+    a: 'Nowhere. Coordinates you paste, files you drop and results you compute stay in the browser tab — there is no upload step and no analytics or tracking script on the site. Two lookups do leave the device by design: map tiles from OpenStreetMap and elevation samples from the Open-Meteo elevation endpoint. Everything else, including all arithmetic, is local.',
+  },
+  {
+    q: 'Which datum and ellipsoid are used?',
+    a: 'Geodesic calculations use WGS 84 with the defining constants a = 6 378 137 m and 1/f = 298.257223563. Local Cartesian input is treated as a planar grid in metres with no implied projection, which is what a total station or CAD drawing gives you; you can paste any projected easting/northing pair as long as the units are metres.',
+  },
+  {
+    q: 'Should I trust the planar area or the geodesic area?',
+    a: 'Both are correct, of different questions. The Gaussian shoelace result is exact for the numbers as drawn on your planar grid, so it is the right check against a plan or a CAD parcel. The geodesic result is the area on the ellipsoid and is the one to quote for ground area over any meaningful extent. The tools print both, plus the difference, so you can see whether the projection is distorting your parcel.',
+  },
+  {
+    q: 'What does the terrain profile actually compute?',
+    a: 'It accumulates geodesic distance between sampled stations along your line, differences the sampled elevations to get climb and descent, then derives gradient and a slope classification from each station-to-station segment. You get total distance, gain, descent, net change, minimum and maximum elevation, mean elevation, average and maximum gradient, and a station table that every headline figure can be traced back to.',
+  },
+  {
+    q: 'What can I export, and is it usable in a report?',
+    a: 'Three artefacts per computation: a CSV of the raw and computed stations, a JSON verification document under the geodesia.report/v1 schema carrying the method statement and timestamp, and a PDF field report typeset client-side with pdf-lib. All three carry the tool name, parameters and an ISO-8601 timestamp so a reviewer can reproduce the result.',
+  },
+  {
+    q: 'Is a Geodesia area a legally usable boundary survey?',
+    a: 'No, and it does not claim to be. It is a planning, verification and coursework instrument: excellent for checking a computed figure, reconciling a deed area, or sanity-checking a consultant’s schedule — but only a licensed surveyor’s adjudicated survey can define a boundary.',
+  },
+  {
+    q: 'Do the instruments work offline?',
+    a: 'Once a page has loaded, all computation works without a network connection. Two features degrade gracefully offline: the map basemap needs tiles, and elevation sampling needs the elevation endpoint. In both cases the tools stay usable through manual coordinate entry and CSV/XLSX upload.',
+  },
+];
+
+const homeFaq = faqs;
+
+const schemas = [
+  organizationSchema(),
+  websiteSchema(),
+  toolListSchema(),
+  toolSchema('terrain'),
+  toolSchema('polygon'),
+  toolSchema('converter'),
+  faqSchema(homeFaq),
+  methodArticleSchema({
+    headline: 'How Geodesia computes area, distance and elevation',
+    description:
+      'Method statement for the Gaussian shoelace planar area, WGS 84 geodesic area and elevation profile statistics used by the Geodesia instruments.',
+    path: '/',
+    section: 'Surveying methods',
+  }),
+];
+
+const features = [
+  {
+    title: 'Named formulas, printed with the result',
+    text: 'Each instrument states the method that produced each figure — Gaussian shoelace, Karney geodesic series, inverse geodesic distance — instead of hiding it behind a black box.',
+  },
+  {
+    title: 'Client-side execution',
+    text: 'No upload endpoint exists. Coordinates and dropped files are read with the File API and evaluated in the tab.',
+  },
+  {
+    title: 'Reproducible exports',
+    text: 'CSV, JSON (geodesia.report/v1) and a PDF field report carrying parameters, method and an ISO-8601 timestamp.',
+  },
+  {
+    title: 'Static, pre-rendered pages',
+    text: 'Every method statement and feature breakdown is real HTML in the first response — no hydration wait before the text you came for.',
+  },
+  {
+    title: 'Keyboard and screen-reader ready',
+    text: 'Real labels on every input, focus rings that survive the dark theme, chart sampling by arrow key, and a manual coordinate path for every map action.',
+  },
+  {
+    title: 'One ecosystem, separate releases',
+    text: 'Geodesia is the hub for Land IQ and MethodFlow; each runs on its own subdomain and keeps its own cadence.',
+  },
+];
+---
+
+<BaseLayout title={title} description={description} canonicalPath="/" schemas={schemas}>
+  <section class="section section--flush hero container">
+    <div class="hero__grid">
+      <div class="hero__copy">
+        <p class="eyebrow">Spatial instruments · WGS 84</p>
+        <h1 class="hero__title">
+          Land surveying instruments<br />
+          that run in <em>your browser</em>.
+        </h1>
+        <p class="hero__lede">
+          Elevation cross-sections, parcel areas from survey coordinates and cadastral unit
+          conversion — evaluated on the WGS 84 ellipsoid, exported as CSV, JSON or a PDF field
+          report. No account, no upload, no server-side compute.
+        </p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="#workspace">
+            Open the workspace
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h13M13 6l6 6-6 6"></path>
+            </svg>
+          </a>
+          <a class="btn" href="#method">Read the methods</a>
+        </div>
+        <p class="hero__note">
+          <span>Karney geodesics</span>
+          <span>Gaussian shoelace</span>
+          <span>pdf-lib reports</span>
+          <span>No tracking scripts</span>
+        </p>
+      </div>
+
+      <figure class="hero__figure">
+        <TerrainGlyph />
+        <figcaption class="hero__caption">
+          <span>Fig. 1 — Cross-section, 2.40 km traverse</span>
+          <span>Gain 468 m · max grade 12.4 %</span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section workspace" id="workspace" aria-labelledby="workspace-title">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">Workspace</p>
+        <h2 class="h-1" id="workspace-title">Three instruments, one bench</h2>
+        <p class="lede" style="margin-top: var(--s-4);">
+          Terrain Profile opens by default. Switch instruments without losing what you have already
+          measured — each tab holds its own state for the session.
+        </p>
+      </div>
+      <Workspace client:load />
+    </div>
+  </section>
+
+  <section class="section hub" id="ecosystem" aria-labelledby="ecosystem-title">
+    <div class="container">
+      <div class="hub__head">
+        <div class="section__head" style="margin-bottom: 0;">
+          <p class="eyebrow">Ecosystem · App directory</p>
+          <h2 class="h-1" id="ecosystem-title">The Geodesia platform</h2>
+          <p class="lede" style="margin-top: var(--s-4); max-width: 60ch;">
+            Geodesia is the hub for a set of decoupled, single-purpose spatial applications. Each
+            runs on its own subdomain, keeps its own release cadence, and is launched from here.
+          </p>
+        </div>
+      </div>
+      <HubFilter client:visible />
+    </div>
+  </section>
+
+  <section class="section" id="method" aria-labelledby="method-title">
+    <div class="container">
+      <div class="section__head section__head--wide">
+        <p class="eyebrow">Method statement</p>
+        <h2 class="h-1" id="method-title">How the numbers are produced</h2>
+        <p class="lede" style="margin-top: var(--s-4);">
+          Every figure is derived from a named, published formula, and every report states which
+          one produced which result. Nothing is approximated silently.
+        </p>
+      </div>
+
+      <div class="split-2">
+        <div class="stack stack--lg">
+          <div class="formula">
+            <p class="formula__name">Planar area · Gaussian shoelace</p>
+            <p class="formula__body">
+              A = ½ · |Σ<sub>i</sub> (<var>x</var><sub>i</sub>·<var>y</var><sub>i+1</sub> −
+              <var>x</var><sub>i+1</sub>·<var>y</var><sub>i</sub>)|
+            </p>
+            <p class="formula__note">
+              The trapezoid form of the shoelace formula, evaluated on vertices in metres. It is
+              exact for the numbers as drawn on a planar grid, independent of ring orientation, and
+              is the correct check against a CAD parcel or a printed plan.
+            </p>
+          </div>
+
+          <div class="formula">
+            <p class="formula__name">Ground area · WGS 84 geodesic</p>
+            <p class="formula__body">
+              A<sub>ellipsoid</sub> = Σ Δλ · (2·E + sin α<sub>1</sub> + sin α<sub>2</sub>) · b²/2
+            </p>
+            <p class="formula__note">
+              Polygon area on the ellipsoid using Karney’s series (GeographicLib). Legs are measured
+              as inverse geodesic distances with forward and back azimuths, so the result is the
+              area on the ground rather than on a projection. A spherical approximation is not
+              adequate at cadastral scale; it is deliberately not offered.
+            </p>
+          </div>
+
+          <div class="formula">
+            <p class="formula__name">Elevation profile statistics</p>
+            <p class="formula__body">
+              Δs<sub>i</sub> = s<sub>i+1</sub> − s<sub>i</sub>   ·   grade % = 100 · Δh/Δs   ·   gain =
+              Σ max(0, Δh)
+            </p>
+            <p class="formula__note">
+              Stations are sampled along the geodesic at a fixed interval, so distance accumulates on
+              the ellipsoid rather than in degrees. Climb and descent are separate accumulations of
+              the positive and negative elevation differences; gradient is derived per segment and the
+              maximum reported with the station where it occurs.
+            </p>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="panel">
+            <div class="panel__head">
+              <h3 class="panel__title">Engine specification</h3>
+            </div>
+            <div class="panel__body panel__body--tight">
+              <dl class="spec-list">
+                <div class="spec-list__row">
+                  <dt>Datum / ellipsoid</dt>
+                  <dd class="mono">{ENGINE.datum}</dd>
+                </div>
+                <div class="spec-list__row">
+                  <dt>Ellipsoid constants</dt>
+                  <dd class="mono">a = 6 378 137 m · 1/f = 298.257223563</dd>
+                </div>
+                <div class="spec-list__row">
+                  <dt>Area methods</dt>
+                  <dd>Shoelace (planar) + Karney geodesic</dd>
+                </div>
+                <div class="spec-list__row">
+                  <dt>Distance method</dt>
+                  <dd>{ENGINE.distanceMethods}</dd>
+                </div>
+                <div class="spec-list__row">
+                  <dt>Runtime</dt>
+                  <dd>{ENGINE.runtime}</dd>
+                </div>
+                <div class="spec-list__row">
+                  <dt>Exports</dt>
+                  <dd class="mono">CSV · JSON · PDF</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          <div class="empty" style="align-items: flex-start; text-align: left;">
+            <p class="empty__title">Instruments in this build</p>
+            <ul class="stack stack--sm" style="width: 100%;">
+              {
+                TOOL_ORDER.map((id, index) => (
+                  <li>
+                    <a class="launch-link" href={TOOLS[id].path}>
+                      <span class="mono faint" style="margin-right: var(--s-3);">0{index + 1}</span>
+                      {TOOLS[id].name}
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-grid" style="margin-top: var(--s-10);">
+        {
+          features.map((feature, index) => (
+            <article class="feature">
+              <p class="feature__index">0{index + 1}</p>
+              <h3 class="feature__title">{feature.title}</h3>
+              <p class="feature__text">{feature.text}</p>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-title">
+    <div class="container split-2">
+      <div>
+        <p class="eyebrow">Questions</p>
+        <h2 class="h-1" id="faq-title" style="margin-block: var(--s-4) var(--s-5);">
+          What engineers ask first
+        </h2>
+        <p class="body-sm" style="max-width: 40ch;">
+          Short answers to the questions that decide whether a browser instrument is usable in real
+          work. Anything unanswered: <a href={`mailto:${SITE.email}`}>{SITE.email}</a>.
+        </p>
+      </div>
+
+      <div class="faq">
+        {
+          homeFaq.map((item) => (
+            <details class="faq__item">
+              <summary class="faq__q">{item.q}</summary>
+              <p class="faq__a">{item.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="start-title">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">Start</p>
+        <h2 class="h-2" id="start-title">Pick the instrument you need</h2>
+      </div>
+      <div class="grid-2">
+        {
+          TOOL_ORDER.map((id, index) => (
+            <a class="app-card" href={TOOLS[id].path} style="text-decoration: none;">
+              <div class="app-card__top">
+                <div>
+                  <h3 class="app-card__title">{TOOLS[id].name}</h3>
+                  <span class="app-card__host">{TOOLS[id].path}</span>
+                </div>
+                <span class="badge badge--live badge--plain">0{index + 1}</span>
+              </div>
+              <p class="app-card__desc">{TOOLS[id].blurb}</p>
+              <div class="app-card__foot">
+                <span class="launch-link">Open instrument</span>
+                <span class="panel__meta">Client-side</span>
+              </div>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</BaseLayout>

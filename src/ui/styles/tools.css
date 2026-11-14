@@ -1,0 +1,629 @@
+/* ==========================================================================
+   GEODESIA — INSTRUMENT LAYER (tools.css)
+   --------------------------------------------------------------------------
+   Scoped internals for the three instruments + hub directory only. Every
+   value comes from tokens.css; the component layer (components.css) still does
+   the heavy lifting. Load after tokens.css → base.css → components.css.
+   ========================================================================== */
+
+/* ------------------------------------------------------- primitives glue */
+.toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.panel__head {
+  flex-wrap: wrap;
+}
+
+.panel__head > .row {
+  margin-left: auto;
+}
+
+/* Segmented control: optional label + full-width variant ------------------ */
+.segmented-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.segmented-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.segmented--full,
+.segmented--full .segmented {
+  display: flex;
+  width: 100%;
+}
+
+.segmented--full .segmented__item {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+/* Notices: body column so titles/actions stack without breaking the icon -- */
+.notice__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.notice__title {
+  color: var(--fg-strong);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-xs);
+}
+
+.notice__text {
+  min-width: 0;
+}
+
+.notice__action {
+  margin-top: var(--s-2);
+}
+
+.empty__icon {
+  color: var(--fg-faint);
+}
+
+.empty__action {
+  margin-top: var(--s-2);
+}
+
+/* Tables: alignment helpers + sticky first column ------------------------ */
+.data-table thead th.is-left,
+.data-table tbody td.is-left,
+.data-table tfoot td.is-left {
+  text-align: left;
+}
+
+.data-table thead th.is-right,
+.data-table tbody td.is-right,
+.data-table tfoot td.is-right {
+  text-align: right;
+}
+
+.data-table thead th.is-center,
+.data-table tbody td.is-center,
+.data-table tfoot td.is-center {
+  text-align: center;
+}
+
+.table-wrap--sticky .data-table thead th:first-child,
+.table-wrap--sticky .data-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-raised);
+}
+
+.table-wrap--sticky .data-table thead th:first-child {
+  z-index: 3;
+  background: var(--bg-sunken);
+}
+
+.table-wrap--sticky .data-table tbody tr:hover td:first-child {
+  background: var(--bg-sunken);
+}
+
+.table-empty {
+  min-width: 0;
+}
+
+/* Compact icon button for table rows ------------------------------------- */
+.icon-btn--xs {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-xs);
+}
+
+.icon-btn--xs svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Instrument helper copy -------------------------------------------------- */
+.tool-hint {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--fg-muted);
+}
+
+.tool-hint strong {
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+}
+
+.check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--fg-soft);
+  cursor: pointer;
+}
+
+.check input {
+  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+/* Upload dropzone + file chip -------------------------------------------- */
+.dropzone-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.dropzone--compact {
+  padding: var(--s-6) var(--s-4);
+}
+
+.dropzone:focus-within {
+  outline: var(--bw-2) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dropzone svg {
+  color: var(--fg-faint);
+}
+
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-2) var(--s-3);
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--fg-muted);
+}
+
+.file-chip svg {
+  flex: none;
+  color: var(--fg-faint);
+}
+
+.file-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.file-chip__meta {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--fg-faint);
+}
+
+/* Progress bar ----------------------------------------------------------- */
+.progress {
+  height: 6px;
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.progress__bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--dur-2) var(--ease-out);
+}
+
+/* ---------------------------------------------------------------- map */
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.map-shell[data-mode="pick-two"] .leaflet-container,
+.map-shell[data-mode="draw"] .leaflet-container,
+.map-shell[data-mode="polygon"] .leaflet-container {
+  cursor: crosshair;
+}
+
+.map-point-label,
+.map-shell .leaflet-tooltip.map-point-label {
+  padding: 1px var(--s-2);
+  border: var(--bw-1) solid var(--line-strong);
+  border-radius: var(--r-xs);
+  background: var(--bg-raised);
+  color: var(--fg);
+  box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+}
+
+.map-shell .leaflet-tooltip.map-point-label::before {
+  display: none;
+}
+
+.map-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: var(--s-5);
+  background: color-mix(in srgb, var(--bg-map) 80%, transparent);
+  pointer-events: none;
+}
+
+.map-fallback__panel {
+  max-width: 320px;
+  padding: var(--s-5);
+  border: var(--bw-1) solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+  pointer-events: auto;
+}
+
+.map-fallback__panel strong {
+  display: block;
+  margin-bottom: var(--s-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--fg-strong);
+}
+
+.map-fallback__panel p {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--fg-muted);
+}
+
+/* -------------------------------------------------------------- chart */
+.chart__plot {
+  position: relative;
+}
+
+.chart__plot .chart {
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.chart__plot .chart:focus-visible {
+  outline: var(--bw-2) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.chart__status {
+  margin-left: var(--s-3);
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+.legend-key--slope::before {
+  height: 8px;
+  width: 8px;
+  background: color-mix(in srgb, var(--ochre-500) 45%, transparent);
+  border-radius: var(--r-xs);
+}
+
+.chart__tooltip-title {
+  display: block;
+  color: var(--fg-strong);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+}
+
+.chart__tooltip-note {
+  display: block;
+  color: var(--accent);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.chart-empty {
+  padding: clamp(2rem, 1rem + 3vw, 3.5rem) var(--s-6);
+  text-align: center;
+}
+
+.chart-empty .empty__text {
+  margin-inline: auto;
+}
+
+.chart-loading__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: clamp(2rem, 1rem + 3vw, 3rem) var(--s-6);
+}
+
+.chart-loading__text {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+/* --------------------------------------------------- polygon sketch */
+.poly-sketch-shell {
+  display: grid;
+  place-items: center;
+  padding: var(--s-4);
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.poly-sketch {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+}
+
+.poly-sketch__grid line {
+  stroke: var(--data-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.poly-sketch__ring {
+  fill: color-mix(in srgb, var(--data-primary) 12%, transparent);
+  stroke: var(--data-primary);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.poly-sketch__vertex circle {
+  fill: var(--accent);
+  stroke: var(--bg-raised);
+  stroke-width: 1.5;
+}
+
+.poly-sketch__label {
+  fill: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.poly-sketch__centroid circle {
+  fill: var(--bg-raised);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.poly-sketch__centroid line {
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+
+.poly-sketch-empty {
+  padding: var(--s-9) var(--s-6);
+  text-align: center;
+}
+
+/* --------------------------------------------------- vertex table */
+.vertex-table-wrap {
+  overflow: auto;
+  max-height: 420px;
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+}
+
+.vertex-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.vertex-table td {
+  vertical-align: top;
+  padding: var(--s-2);
+}
+
+.vertex-table__index {
+  width: 40px;
+  padding-top: var(--s-3) !important;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+}
+
+.input--cell {
+  min-height: 30px;
+  padding: 2px var(--s-3);
+  font-size: var(--text-xs);
+  border-color: var(--line-soft);
+  background: transparent;
+}
+
+.input--cell:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
+}
+
+.input--cell:focus {
+  border-color: var(--accent);
+  background: var(--bg-raised);
+}
+
+.vertex-table__dms {
+  display: block;
+  margin-top: 2px;
+  padding-left: 2px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+.vertex-table__actions {
+  white-space: nowrap;
+}
+
+.vertex-table__actions .icon-btn--xs + .icon-btn--xs {
+  margin-left: 2px;
+}
+
+/* ------------------------------------------------------ converter */
+.converter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.converter__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.converter__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.converter__count {
+  padding: 0 var(--s-2);
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-xs);
+  color: var(--fg-faint);
+  font-weight: var(--weight-regular);
+}
+
+.converter__table-wrap {
+  max-height: 260px;
+}
+
+.converter-table td:first-child {
+  text-align: left;
+}
+
+.converter-unit__label {
+  color: var(--fg);
+}
+
+.converter-unit__symbol {
+  margin-left: var(--s-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--fg-faint);
+}
+
+.converter-table__copy {
+  width: 44px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------- hub */
+.hub-filter {
+  min-width: 0;
+}
+
+.app-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.app-card__technical {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  color: var(--fg-faint);
+}
+
+.app-card__status-note {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------- responsive */
+@media (max-width: 860px) {
+  .workspace__status {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .panel__head {
+    align-items: flex-start;
+  }
+
+  .panel__head > .row {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-shell {
+    min-height: 300px;
+    height: clamp(300px, 42vh, 420px);
+  }
+
+  .chart-shell__legend {
+    flex-wrap: wrap;
+    row-gap: var(--s-1);
+  }
+
+  .chart__status {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 400px) {
+  .tab {
+    padding-inline: var(--s-4);
+  }
+
+  .readout__value {
+    font-size: 1.25rem;
+  }
+}
+
+/* --------------------------------------------------------------- print */
+@media print {
+  .chart__tooltip,
+  .map-overlay,
+  .map-fallback,
+  .dropzone,
+  .progress {
+    display: none !important;
+  }
+}

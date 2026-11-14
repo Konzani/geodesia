@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-labelledby="gsMarkTitle">
+  <title id="gsMarkTitle">Geodesia channel mark</title>
+  <!--
+    GEODESIA CHANNEL MARK — "Trigon"
+    A cartographic triangulation-station symbol (triangle with a station dot),
+    set on a basalt tile with a hairline graticule. Two colours only.
+    Geometrically constructed on a 48-unit grid: apex 24,11 · base 11.5–36.5,36
+  -->
+  <rect width="48" height="48" rx="10" fill="#0E1413"/>
+
+  <!-- graticule (meridians + parallels), 9% opacity: reads as map graticule, vanishes at 16px -->
+  <g stroke="#F6F3EC" stroke-opacity="0.10" stroke-width="1" stroke-linecap="square">
+    <path d="M16 9V39" />
+    <path d="M32 9V39" />
+    <path d="M9 16H39" />
+    <path d="M9 32H39" />
+  </g>
+
+  <!-- trigon -->
+  <path d="M24 11 L36.5 36 H11.5 Z" fill="none" stroke="#F6F3EC" stroke-width="3" stroke-linejoin="miter"/>
+
+  <!-- station dot (principal accent) -->
+  <circle cx="24" cy="28.2" r="3.6" fill="#C0451E"/>
+</svg>

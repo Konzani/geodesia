@@ -1,0 +1,142 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { aboutContent } from '../seo/content/about';
+import { DISCLAIMER, ECOSYSTEM, ENGINE, SITE, TOOLS, TOOL_ORDER } from '../seo/site';
+import { breadcrumbSchema, organizationSchema, websiteSchema } from '../seo/schema';
+
+const schemas = [
+  organizationSchema(),
+  websiteSchema(),
+  breadcrumbSchema([{ label: 'Method & standards', href: '/about' }]),
+];
+---
+
+<BaseLayout
+  title="Method, Standards & Limits — Geodesia"
+  description="How Geodesia computes survey results: WGS 84 geodesic methods, Gaussian shoelace area, client-side execution, export semantics and honest limits."
+  canonicalPath="/about"
+  keywords={['geodesia methods', 'WGS 84 geodesic computation', 'shoelace formula', 'survey calculator accuracy']}
+  schemas={schemas}
+  ogType="article"
+>
+  <section class="section section--flush hero container">
+    <div style="max-width: 80ch;">
+      <p class="eyebrow">{aboutContent.eyebrow}</p>
+      <h1 class="hero__title" style="font-size: var(--text-3xl); max-width: 24ch;">{aboutContent.h1}</h1>
+      <p class="hero__lede" style="max-width: 66ch;">{aboutContent.lede}</p>
+      <p class="hero__note">
+        <span>{ENGINE.datum}</span>
+        <span>Client-side execution</span>
+        <span>No accounts</span>
+        <span>No tracking scripts</span>
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container split-2">
+      <div class="prose">
+        {
+          aboutContent.sections.map((section) => (
+            <>
+              <h2>{section.heading}</h2>
+              {section.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+              {section.bullets && (
+                <ul>
+                  {section.bullets.map((bullet) => <li>{bullet}</li>)}
+                </ul>
+              )}
+            </>
+          ))
+        }
+      </div>
+
+      <aside class="stack" aria-label="Reference">
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">Engine reference</h2>
+          </div>
+          <div class="panel__body panel__body--tight">
+            <dl class="spec-list">
+              <div class="spec-list__row">
+                <dt>Datum</dt>
+                <dd class="mono">{ENGINE.datum}</dd>
+              </div>
+              <div class="spec-list__row">
+                <dt>Ellipsoid</dt>
+                <dd class="mono">{ENGINE.ellipsoid}</dd>
+              </div>
+              <div class="spec-list__row">
+                <dt>Area methods</dt>
+                <dd>{ENGINE.areaMethods.join(' · ')}</dd>
+              </div>
+              <div class="spec-list__row">
+                <dt>Distance</dt>
+                <dd>{ENGINE.distanceMethods}</dd>
+              </div>
+              <div class="spec-list__row">
+                <dt>Runtime</dt>
+                <dd>{ENGINE.runtime}</dd>
+              </div>
+              <div class="spec-list__row">
+                <dt>Exports</dt>
+                <dd class="mono">{ENGINE.exports.join(' · ')}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">Instruments</h2>
+          </div>
+          <div class="panel__body panel__body--tight">
+            <ul class="stack stack--sm">
+              {
+                TOOL_ORDER.map((id, index) => (
+                  <li>
+                    <a class="launch-link" href={TOOLS[id].path}>
+                      <span class="mono faint" style="margin-right: var(--s-3);">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      {TOOLS[id].name}
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">Ecosystem</h2>
+          </div>
+          <div class="panel__body panel__body--tight">
+            <ul class="stack stack--sm">
+              {
+                ECOSYSTEM.map((app) => (
+                  <li>
+                    <a class="launch-link" href={app.internal ? (app.path ?? '/') : app.url} rel={app.internal ? undefined : 'noopener'}>
+                      {app.name}
+                    </a>
+                    <span class="badge badge--plain" style="margin-left: var(--s-3);">{app.statusLabel}</span>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        </div>
+
+        <div class="notice notice--warn">
+          <span class="notice__icon" aria-hidden="true">!</span>
+          <span>{DISCLAIMER}</span>
+        </div>
+
+        <p class="body-sm">
+          Corrections and method queries: <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
+        </p>
+      </aside>
+    </div>
+  </section>
+</BaseLayout>

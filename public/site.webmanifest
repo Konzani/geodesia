@@ -1,0 +1,38 @@
+{
+  "name": "Geodesia — Spatial Instruments",
+  "short_name": "Geodesia",
+  "description": "Client-side land surveying instruments: terrain profiles, polygon area from coordinates, and land unit conversion.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F6F3EC",
+  "theme_color": "#0E1413",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["utilities", "productivity", "education"],
+  "icons": [
+    {
+      "src": "/brand/geodesia-mark-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/geodesia-mark-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Terrain Profile", "url": "/terrain-profile" },
+    { "name": "Polygon Area", "url": "/polygon-area" },
+    { "name": "Land Unit Converter", "url": "/land-unit-converter" }
+  ]
+}

@@ -1,0 +1,154 @@
+---
+import plexSans400 from '@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2?url';
+import plexSans500 from '@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-500-normal.woff2?url';
+import plexSans600 from '@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2?url';
+import plexMono400 from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2?url';
+import plexMono500 from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2?url';
+
+import '../ui/styles/tokens.css';
+import '../ui/styles/base.css';
+import '../ui/styles/components.css';
+
+import SiteHeader from '../ui/components/SiteHeader.astro';
+import SiteFooter from '../ui/components/SiteFooter.astro';
+import { SITE } from '../seo/site';
+import { graph, type JsonLd } from '../seo/schema';
+
+/* WOFF2-only @font-face rules, emitted inline so the preload hrefs and the
+   stylesheet URLs reference the identical hashed asset. Latin subset. */
+const LATIN_RANGE =
+  'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
+
+const fontFaceCss = [
+  `@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400;font-display:swap;src:url(${plexSans400}) format('woff2');unicode-range:${LATIN_RANGE}}`,
+  `@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:500;font-display:swap;src:url(${plexSans500}) format('woff2');unicode-range:${LATIN_RANGE}}`,
+  `@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:600;font-display:swap;src:url(${plexSans600}) format('woff2');unicode-range:${LATIN_RANGE}}`,
+  `@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url(${plexMono400}) format('woff2');unicode-range:${LATIN_RANGE}}`,
+  `@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url(${plexMono500}) format('woff2');unicode-range:${LATIN_RANGE}}`,
+].join('');
+
+interface Props {
+  /** Full <title>. Compose the brand suffix per page so length stays controlled. */
+  title: string;
+  description: string;
+  /** Route of this page, e.g. '/terrain-profile'. Used for canonical + og:url.
+   *  Omit on non-indexable pages (404) so no canonical is emitted. */
+  canonicalPath?: string;
+  ogType?: 'website' | 'article';
+  keywords?: string[];
+  /** JSON-LD nodes appended to the page graph. */
+  schemas?: JsonLd[];
+  noindex?: boolean;
+  bodyClass?: string;
+}
+
+const {
+  title,
+  description,
+  canonicalPath,
+  ogType = 'website',
+  keywords,
+  schemas = [],
+  noindex = false,
+  bodyClass = '',
+} = Astro.props;
+
+const normalizedPath = canonicalPath
+  ? canonicalPath === '/'
+    ? '/'
+    : canonicalPath.replace(/\/+$/, '')
+  : null;
+const canonical = normalizedPath ? new URL(normalizedPath, SITE.url).href : null;
+const ogImage = new URL(SITE.ogImage, SITE.url).href;
+const keywordList = (keywords ?? SITE.keywords).join(', ');
+const schemaDoc = schemas.length > 0 ? graph(...schemas) : null;
+---
+
+<!doctype html>
+<html lang={SITE.lang} dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- theme must resolve before first paint to avoid a flash -->
+    <script is:inline>
+      (() => {
+        try {
+          const stored = localStorage.getItem('geodesia-theme');
+          const system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          document.documentElement.dataset.theme = stored === 'dark' || stored === 'light' ? stored : system;
+        } catch (error) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content={keywordList} />
+    {canonical && <link rel="canonical" href={canonical} />}
+    <meta name="robots" content={noindex ? 'noindex,follow' : 'index,follow,max-image-preview:large,max-snippet:-1'} />
+    <meta name="author" content={SITE.name} />
+    <meta name="theme-color" content={SITE.themeColor} media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F6F3EC" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:url" content={canonical ?? SITE.url} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content={String(SITE.ogImageWidth)} />
+    <meta property="og:image:height" content={String(SITE.ogImageHeight)} />
+    <meta property="og:image:alt" content={SITE.ogImageAlt} />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={SITE.ogImageAlt} />
+
+    <!-- icons + manifest -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/brand/geodesia-mark-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/brand/geodesia-apple-180.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="sitemap" href="/sitemap.xml" type="application/xml" />
+
+    <!-- self-hosted fonts: preload the faces used above the fold -->
+    <link rel="preload" href={plexSans400} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={plexSans600} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={plexMono400} as="font" type="font/woff2" crossorigin />
+    <style is:inline set:html={fontFaceCss}></style>
+
+    {schemaDoc && <script type="application/ld+json" set:html={JSON.stringify(schemaDoc)} />}
+    <slot name="head" />
+  </head>
+
+  <body class={bodyClass}>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="shell">
+      <SiteHeader currentPath={normalizedPath ?? '/'} />
+      <main class="main" id="main">
+        <noscript>
+          <div class="container" style="padding-top: var(--s-5);">
+            <div class="notice notice--warn">
+              <span class="notice__icon" aria-hidden="true">!</span>
+              <span>
+                The interactive instruments need JavaScript — every measurement method, formula and
+                feature on this page remains fully readable without it.
+              </span>
+            </div>
+          </div>
+        </noscript>
+        <slot />
+      </main>
+      <SiteFooter />
+    </div>
+  </body>
+</html>

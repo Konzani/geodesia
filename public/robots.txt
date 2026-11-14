@@ -1,0 +1,16 @@
+# Geodesia lives at https://geodesia.online — all crawlers welcome.
+User-agent: *
+Allow: /
+
+# The workspace island needs JavaScript to compute, but every method,
+# formula and feature description is pre-rendered in the HTML payload.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+Sitemap: https://geodesia.online/sitemap.xml

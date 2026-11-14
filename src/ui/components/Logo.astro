@@ -1,0 +1,43 @@
+---
+/**
+ * Geodesia channel mark — inline SVG so it costs zero requests and can be
+ * painted before any font or script loads (LCP discipline).
+ *
+ * Geometry is fixed on a 48-unit grid: tile r10, trigon apex (24,11),
+ * base (11.5,36)–(36.5,36), station dot (24,28.2) r3.6.
+ * Colours are the permanent brand constants, not theme tokens: the mark must
+ * read identically on paper, basalt and in print.
+ */
+interface Props {
+  /** Rendered square size in px. */
+  size?: number;
+  class?: string;
+  /** Decorative marks (header next to the wordmark) skip the title. */
+  decorative?: boolean;
+}
+
+const { size = 26, class: className = '', decorative = true } = Astro.props;
+---
+
+<svg
+  class={className}
+  width={size}
+  height={size}
+  viewBox="0 0 48 48"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+  role={decorative ? 'presentation' : 'img'}
+  aria-hidden={decorative ? 'true' : undefined}
+  aria-label={decorative ? undefined : 'Geodesia channel mark'}
+>
+  {!decorative && <title>Geodesia channel mark</title>}
+  <rect width="48" height="48" rx="10" fill="#0E1413" />
+  <g stroke="#F6F3EC" stroke-opacity="0.10" stroke-width="1" stroke-linecap="square">
+    <path d="M16 9V39"></path>
+    <path d="M32 9V39"></path>
+    <path d="M9 16H39"></path>
+    <path d="M9 32H39"></path>
+  </g>
+  <path d="M24 11 L36.5 36 H11.5 Z" fill="none" stroke="#F6F3EC" stroke-width="3" stroke-linejoin="miter"></path>
+  <circle cx="24" cy="28.2" r="3.6" fill="#C0451E"></circle>
+</svg>

@@ -1,0 +1,25 @@
+# Licence
+
+Copyright © 2026 **Geodesia** (Brian Konzani). All rights reserved.
+
+The contents of this repository — source code, design tokens, the Geodesia channel
+mark and brand assets, the written method statements and all other content — are
+proprietary. No licence is granted to copy, modify, redistribute, sublicense or
+deploy this work, in whole or in part, without prior written permission from the
+copyright holder.
+
+`package.json` therefore declares `"license": "UNLICENSED"` and the package is
+`"private": true`.
+
+## Third-party components
+
+This project builds on open-source software and open data, each used under its own
+licence. See **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)** for the full list
+and required attributions (Astro, React, Leaflet, pdf-lib, SheetJS, GeographicLib,
+IBM Plex, OpenStreetMap tiles, Open-Meteo).
+
+## Trademarks and domains
+
+`geodesia.online`, `landiq.geodesia.online`, `methodflow.geodesia.online` and the
+Geodesia channel mark are part of this project's identity. Nothing in this document
+grants rights to use them.

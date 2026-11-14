@@ -1,0 +1,13 @@
+# Normalise line endings so Windows and Vercel (Linux) builds agree.
+* text=auto eol=lf
+
+# Binary assets — never normalise, never diff.
+*.png binary
+*.webp binary
+*.jpg binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+# Keep generated/dist and locks explicit.
+package-lock.json text eol=lf

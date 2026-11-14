@@ -1,0 +1,147 @@
+---
+/**
+ * Hero figure — a real elevation cross-section drawn as vector cartography:
+ * station markers, vertical drops, graticule hairlines, summit callout and a
+ * distance scale. Deliberately data-shaped rather than decorative, and drawn in
+ * currentColor / token colours so it themes with the page.
+ *
+ * The sample profile: 2.40 km traverse, 1 680 m → 2 148 m summit → 1 802 m.
+ */
+interface Props {
+  class?: string;
+}
+
+const { class: className = '' } = Astro.props;
+
+/** [distance km, elevation m] */
+const profile: Array<[number, number]> = [
+  [0.0, 1680],
+  [0.15, 1712],
+  [0.3, 1705],
+  [0.45, 1760],
+  [0.6, 1802],
+  [0.75, 1875],
+  [0.9, 1908],
+  [1.05, 1975],
+  [1.2, 2050],
+  [1.35, 2102],
+  [1.5, 2148],
+  [1.65, 2090],
+  [1.8, 2022],
+  [1.95, 1958],
+  [2.1, 1884],
+  [2.25, 1830],
+  [2.4, 1802],
+];
+
+const X0 = 58;
+const X1 = 540;
+const Y_BASE = 252;
+const Y_TOP = 44;
+const E_MIN = 1600;
+const E_MAX = 2200;
+const D_MAX = 2.4;
+
+const ex = (km: number): number => X0 + (km / D_MAX) * (X1 - X0);
+const ey = (m: number): number => Y_BASE - ((m - E_MIN) / (E_MAX - E_MIN)) * (Y_BASE - Y_TOP);
+
+const line = profile.map(([d, e], i) => `${i === 0 ? 'M' : 'L'}${ex(d).toFixed(1)},${ey(e).toFixed(1)}`).join(' ');
+const area = `${line} L${X1},${Y_BASE} L${X0},${Y_BASE} Z`;
+
+const summit = profile.reduce((best, point) => (point[1] > best[1] ? point : best), profile[0]);
+const summitX = ex(summit[0]);
+const summitY = ey(summit[1]);
+
+const gridElevations = [1700, 1800, 1900, 2000, 2100];
+const ticks = [0, 0.6, 1.2, 1.8, 2.4];
+---
+
+<svg
+  class={className}
+  viewBox="0 0 580 300"
+  role="img"
+  aria-labelledby="heroGlowTitle heroGlowDesc"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <title id="heroGlowTitle">Terrain cross-section from a 2.4 km traverse</title>
+  <desc id="heroGlowDesc">
+    Elevation profile rising from 1 680 metres to a 2 148 metre summit and descending to
+    1 802 metres, with station markers and a distance scale.
+  </desc>
+
+  <defs>
+    <linearGradient id="profileWash" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="var(--data-primary)" stop-opacity="0.16"></stop>
+      <stop offset="100%" stop-color="var(--data-primary)" stop-opacity="0.015"></stop>
+    </linearGradient>
+  </defs>
+
+  <!-- graticule: parallels with elevation labels -->
+  <g class="chart__grid">
+    {
+      gridElevations.map((m) => (
+        <line x1={X0} y1={ey(m)} x2={X1} y2={ey(m)} stroke="var(--data-grid)" stroke-width="1" shape-rendering="crispEdges" />
+      ))
+    }
+  </g>
+  <g class="chart__label">
+    {
+      gridElevations.map((m) => (
+        <text x={X0 - 8} y={ey(m) + 3} text-anchor="end">
+          {m.toLocaleString('en-GB').replace(',', ' ')}
+        </text>
+      ))
+    }
+    <text x={X0 - 8} y={Y_TOP - 6} text-anchor="end">m</text>
+  </g>
+
+  <!-- background contour motif -->
+  <g fill="none" stroke="var(--contour-ink)" stroke-width="1">
+    <path d="M58 64c60-22 96 8 150-2s70-30 132-18 88 26 140 4"></path>
+    <path d="M58 84c60-20 96 10 150 0s70-28 132-16 88 24 140 2"></path>
+  </g>
+
+  <!-- terrain body -->
+  <path d={area} fill="url(#profileWash)"></path>
+  <path d={line} fill="none" stroke="var(--data-primary)" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"></path>
+
+  <!-- baseline + distance ticks -->
+  <line x1={X0} y1={Y_BASE} x2={X1} y2={Y_BASE} stroke="var(--data-axis)" stroke-width="1"></line>
+  <g class="chart__label">
+    {
+      ticks.map((d) => (
+        <>
+          <line x1={ex(d)} y1={Y_BASE} x2={ex(d)} y2={Y_BASE + 4} stroke="var(--data-axis)" stroke-width="1"></line>
+          <text x={ex(d)} y={Y_BASE + 16} text-anchor={d === 0 ? 'start' : d === D_MAX ? 'end' : 'middle'}>
+            {d.toFixed(1)}
+          </text>
+        </>
+      ))
+    }
+    <text x={X1} y={Y_BASE + 30} text-anchor="end">km</text>
+  </g>
+
+  <!-- station A: vertical drop + marker -->
+  <line x1={X0} y1={ey(profile[0][1])} x2={X0} y2={Y_BASE} stroke="var(--fg-faint)" stroke-width="1" stroke-dasharray="3 3"></line>
+  <rect x={X0 - 3.5} y={ey(profile[0][1]) - 3.5} width="7" height="7" fill="var(--bg-raised)" stroke="var(--fg)" stroke-width="1.5"></rect>
+  <text x={X0 + 8} y={ey(profile[0][1]) - 7} class="chart__label" text-anchor="start">A · 1 680</text>
+
+  <!-- station B -->
+  <line x1={X1} y1={ey(profile[profile.length - 1][1])} x2={X1} y2={Y_BASE} stroke="var(--fg-faint)" stroke-width="1" stroke-dasharray="3 3"></line>
+  <rect x={X1 - 3.5} y={ey(profile[profile.length - 1][1]) - 3.5} width="7" height="7" fill="var(--bg-raised)" stroke="var(--fg)" stroke-width="1.5"></rect>
+  <text x={X1 - 8} y={ey(profile[profile.length - 1][1]) - 7} class="chart__label" text-anchor="end">B · 1 802</text>
+
+  <!-- summit callout -->
+  <g>
+    <line x1={summitX} y1={summitY - 6} x2={summitX} y2={summitY - 26} stroke="var(--accent)" stroke-width="1"></line>
+    <circle cx={summitX} cy={summitY} r="3.6" fill="var(--accent)" stroke="var(--bg-raised)" stroke-width="1.5"></circle>
+    <text x={summitX + 6} y={summitY - 28} class="chart__label" fill="var(--accent)" text-anchor="middle">
+      2 148 m
+    </text>
+  </g>
+
+  <!-- gradient annotation between stations -->
+  <text x={(X0 + X1) / 2} y={Y_BASE + 30} class="chart__label" text-anchor="middle">
+    traverse 2.40 km · gain 468 m · max grade 12.4 %
+  </text>
+</svg>

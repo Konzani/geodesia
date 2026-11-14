@@ -1,0 +1,263 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Workspace from '../ui/tools/Workspace.tsx';
+import { TOOLS, type ToolId } from '../seo/site';
+import {
+  breadcrumbSchema,
+  faqSchema,
+  methodArticleSchema,
+  organizationSchema,
+  toolSchema,
+  websiteSchema,
+} from '../seo/schema';
+import type { ToolPageContent } from '../seo/content/types';
+
+interface Props {
+  content: ToolPageContent;
+  toolId: ToolId;
+  /** Hash-free route for canonical, e.g. '/terrain-profile'. */
+  path: string;
+}
+
+const { content, toolId, path } = Astro.props;
+const tool = TOOLS[toolId];
+
+const schemas = [
+  organizationSchema(),
+  websiteSchema(),
+  toolSchema(toolId),
+  breadcrumbSchema([{ label: tool.name, href: path }]),
+  methodArticleSchema({
+    headline: `How ${tool.name} computes its results`,
+    description: content.formulas.map((formula) => `${formula.name}: ${formula.note}`).join(' '),
+    path,
+    section: 'Surveying methods',
+  }),
+  faqSchema(content.faqs),
+];
+---
+
+<BaseLayout
+  title={tool.metaTitle}
+  description={tool.metaDescription}
+  canonicalPath={path}
+  keywords={[...tool.keywords, ...content.features.map((feature) => feature.title.toLowerCase())]}
+  schemas={schemas}
+  ogType="article"
+>
+  <section class="section section--flush hero container">
+    <div class="hero__grid" style="grid-template-columns: minmax(0, 1fr);">
+      <div style="max-width: 78ch;">
+        <p class="eyebrow">{content.eyebrow}</p>
+        <h1 class="hero__title" style="font-size: var(--text-3xl); max-width: 26ch;">{content.h1}</h1>
+        <p class="hero__lede" style="max-width: 68ch;">{content.lede}</p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="#workspace">
+            Open the instrument
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h13M13 6l6 6-6 6"></path>
+            </svg>
+          </a>
+          <a class="btn" href="#method">Read the method</a>
+          <a class="btn btn--quiet" href="/">All instruments</a>
+        </div>
+        <p class="hero__note">
+          <span>{tool.shortName} instrument</span>
+          <span>Client-side execution</span>
+          <span>CSV · JSON · PDF</span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section workspace" id="workspace" aria-labelledby="instrument-title">
+    <div class="container">
+      <h2 class="sr-only" id="instrument-title">{tool.name} workspace</h2>
+      <Workspace client:load initialTab={toolId} />
+    </div>
+  </section>
+
+  <section class="section" id="overview">
+    <div class="container">
+      <div class="split-2">
+        <div>
+          <p class="eyebrow">Overview</p>
+          <div class="prose" style="margin-top: var(--s-5);">
+            {content.intro.map((paragraph) => <p>{paragraph}</p>)}
+          </div>
+        </div>
+        <div class="stack">
+          <div class="panel">
+            <div class="panel__head">
+              <h2 class="panel__title">Technical specification</h2>
+            </div>
+            <div class="panel__body panel__body--tight">
+              <dl class="spec-list">
+                {
+                  content.specs.map((spec) => (
+                    <div class="spec-list__row">
+                      <dt>{spec.label}</dt>
+                      <dd class="mono">{spec.value}</dd>
+                    </div>
+                  ))
+                }
+              </dl>
+            </div>
+          </div>
+          <p class="body-sm">
+            Runs entirely in the browser tab. Nothing you paste or drop is uploaded anywhere.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features" aria-labelledby="features-title">
+    <div class="container">
+      <div class="section__head section__head--wide">
+        <p class="eyebrow">Capabilities</p>
+        <h2 class="h-1" id="features-title">What {tool.shortName} does</h2>
+      </div>
+      <div class="feature-grid">
+        {
+          content.features.map((feature, index) => (
+            <article class="feature">
+              <p class="feature__index">0{index + 1}</p>
+              <h3 class="feature__title">{feature.title}</h3>
+              <p class="feature__text">{feature.text}</p>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="workflow" aria-labelledby="workflow-title">
+    <div class="container split-2">
+      <div>
+        <p class="eyebrow">Procedure</p>
+        <h2 class="h-1" id="workflow-title" style="margin-block: var(--s-4) var(--s-5);">
+          Working the instrument
+        </h2>
+        <p class="body-sm" style="max-width: 44ch;">
+          The workspace is designed so a field measurement can become a filed report without leaving
+          the tab: enter, verify, read, export.
+        </p>
+      </div>
+      <div class="steps">
+        {
+          content.workflow.map((step, index) => (
+            <div class="step">
+              <span class="step__num">{String(index + 1).padStart(2, '0')}</span>
+              <div>
+                <h3 class="step__title">{step.title}</h3>
+                <p class="step__text">{step.text}</p>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="method" aria-labelledby="method-title">
+    <div class="container">
+      <div class="section__head section__head--wide">
+        <p class="eyebrow">Method statement</p>
+        <h2 class="h-1" id="method-title">How it is computed</h2>
+        <p class="lede" style="margin-top: var(--s-4);">
+          The formula behind every headline figure, stated plainly enough to check by hand.
+        </p>
+      </div>
+      <div class="split-2">
+        <div class="stack stack--lg">
+          {
+            content.formulas.map((formula, index) => (
+              <div class="formula">
+                <p class="formula__name">
+                  {String(index + 1).padStart(2, '0')} · {formula.name}
+                </p>
+                <p class="formula__body">{formula.body}</p>
+                <p class="formula__note">{formula.note}</p>
+              </div>
+            ))
+          }
+        </div>
+        <div class="stack">
+          <div class="notice notice--info">
+            <span class="notice__icon" aria-hidden="true">i</span>
+            <span>
+              Geodesic computations use WGS 84 with the defining constants
+              <span class="mono">a = 6 378 137 m</span> and
+              <span class="mono">1/f = 298.257223563</span>. Planar computations treat input as a
+              grid in metres with no implied projection.
+            </span>
+          </div>
+          <div class="notice">
+            <span class="notice__icon" aria-hidden="true">§</span>
+            <span>
+              Calculations are carried at double precision and rounded only for display. Each export
+              records the parameters and the rounding applied, so a reviewer can re-check every filed
+              figure from the numbers in the report.
+            </span>
+          </div>
+          <a class="btn" href="#workspace">Open the instrument</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-title">
+    <div class="container split-2">
+      <div>
+        <p class="eyebrow">Questions</p>
+        <h2 class="h-1" id="faq-title" style="margin-block: var(--s-4) var(--s-5);">
+          {tool.shortName} questions
+        </h2>
+      </div>
+      <div class="faq">
+        {
+          content.faqs.map((item) => (
+            <details class="faq__item">
+              <summary class="faq__q">{item.q}</summary>
+              <p class="faq__a">{item.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="related-title">
+    <div class="container">
+      <div class="section__head">
+        <p class="eyebrow">Continue</p>
+        <h2 class="h-2" id="related-title">Other instruments</h2>
+      </div>
+      <div class="grid-2">
+        {
+          (Object.values(TOOLS) as Array<(typeof TOOLS)[ToolId]>)
+            .filter((item) => item.id !== toolId)
+            .map((item) => (
+              <a class="app-card" href={item.path} style="text-decoration: none;">
+                <div class="app-card__top">
+                  <div>
+                    <h3 class="app-card__title">{item.name}</h3>
+                    <span class="app-card__host">{item.path}</span>
+                  </div>
+                  <span class="badge badge--plain">Client-side</span>
+                </div>
+                <p class="app-card__desc">{item.blurb}</p>
+                <div class="app-card__foot">
+                  <span class="launch-link">Open instrument</span>
+                </div>
+              </a>
+            ))
+        }
+      </div>
+      <div class="prose" style="margin-top: var(--s-9);">
+        <p>{content.closing}</p>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
