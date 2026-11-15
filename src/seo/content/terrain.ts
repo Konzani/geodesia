@@ -82,7 +82,7 @@ export const terrainContent: ToolPageContent = {
     { label: 'File columns', value: 'chainage + elevation, or latitude + longitude + elevation' },
     { label: 'Distance method', value: 'Inverse geodesic, WGS 84 ellipsoid' },
     { label: 'Sampling', value: 'Fixed spacing along the line, stations capped for legibility' },
-    { label: 'Elevation source', value: 'Supplied in file, or sampled from the elevation service' },
+    { label: 'Elevation source', value: 'Supplied in file, or sampled through the Geodesia edge elevation service (Open-Meteo fallback)' },
     { label: 'Statistics', value: 'Distance · gain · descent · net · min · max · mean · grade' },
     { label: 'Exports', value: 'CSV · JSON (geodesia.report/v1) · PDF field report' },
     { label: 'Limits', value: 'Elevation surface resolution, not vegetation or canopy height' },
@@ -91,7 +91,7 @@ export const terrainContent: ToolPageContent = {
   faqs: [
     {
       q: 'Where does the elevation come from, and how accurate is it?',
-      a: 'In map mode the elevations are sampled from the Open-Meteo elevation endpoint, which returns a global digital elevation model value at each coordinate. That is a bare-earth surface at a horizontal resolution of tens of metres, so it will not represent a cutting, a bridge deck or a hedge, and it should not be quoted as survey accuracy. In upload mode the elevations are yours, and the statistics are only as good as the levels in the file.',
+      a: 'In map mode the elevations come from the Geodesia edge elevation service, which returns a global digital elevation model value at each coordinate and falls back to Open-Meteo if the edge service cannot answer. That is a bare-earth surface at a horizontal resolution of tens of metres, so it will not represent a cutting, a bridge deck or a hedge, and it should not be quoted as survey accuracy. The background map is served through the Geodesia edge tile cache — Thunderforest topo styling with data © OpenStreetMap contributors, and automatic fallback providers if the edge service is unreachable — and changing the basemap has no effect on the elevations or the profile. In upload mode the elevations are yours, and the statistics are only as good as the levels in the file.',
     },
     {
       q: 'Why is the line on the map slightly curved?',

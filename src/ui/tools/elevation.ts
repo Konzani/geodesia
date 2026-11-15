@@ -1,21 +1,26 @@
 /**
- * GEODESIA — Open-Meteo elevation client.
+ * GEODESIA — elevation client (resilient endpoint chain).
  *
- * Client-side only: batches requests at the API limit (100 points per call),
- * de-duplicates, caches by rounded coordinate for the session, and retries with
- * backoff. Partial failures are returned as `null` samples so the instrument can
- * interpolate and disclose the gap instead of failing the whole profile.
+ * Client-side only. Endpoints are tried in order from `basemap.ts`
+ * (`ELEVATION_ENDPOINTS`): the Geodesia edge worker first, then Open-Meteo.
+ * Requests are batched at the API limit (100 points per call), de-duplicated,
+ * cached by rounded coordinate for the session, and retried with backoff across
+ * the whole chain. Partial failures are returned as `null` samples so the
+ * instrument can interpolate and disclose the gap instead of failing the whole
+ * profile.
  *
  * No `window` access at module scope — this module is safe to import during SSR.
  */
 import type { LatLon } from '../../math/types';
+import { ELEVATION_ENDPOINTS } from './basemap';
 
-export const ELEVATION_ENDPOINT = 'https://api.open-meteo.com/v1/elevation';
-/** Open-Meteo accepts up to 100 coordinates per elevation request. */
+/** Batch limit shared by both elevation services. */
 export const MAX_POINTS_PER_REQUEST = 100;
 const CACHE_LIMIT = 5000;
 const CACHE_DECIMALS = 6;
 const REQUEST_TIMEOUT_MS = 12_000;
+/** Retry rounds per endpoint (each round visits the whole chain once). */
+const DEFAULT_RETRIES = 2;
 
 /** Session-lifetime elevation cache, keyed by rounded lat/lon. */
 const elevationCache = new Map<string, number>();
@@ -32,17 +37,19 @@ export interface ElevationProgress {
 export interface ElevationFetchOptions {
   signal?: AbortSignal;
   onProgress?: (progress: ElevationProgress) => void;
-  /** Retries per batch after the initial attempt (default 2). */
+  /** Retry rounds after the initial attempt (default 2). */
   retries?: number;
 }
 
 export interface ElevationFetchResult {
-  /** Elevation per input point; `null` where the service did not answer. */
+  /** Elevation per input point; `null` where no service answered. */
   elevations: Array<number | null>;
   /** Number of batches that failed after all retries. */
   failedBatches: number;
   /** Number of samples served from the session cache. */
   fromCache: number;
+  /** Endpoint URL that answered the last successful batch, if any. */
+  endpoint: string | null;
 }
 
 /** Empty the session elevation cache (used by the tool's "clear cache" action). */
@@ -53,6 +60,19 @@ export function clearElevationCache(): void {
 /** Current number of cached elevation samples. */
 export function elevationCacheSize(): number {
   return elevationCache.size;
+}
+
+/** Human label for an endpoint URL, for the instrument status line. */
+export function describeElevationEndpoint(endpoint: string | null): string {
+  if (!endpoint) return 'elevation service';
+  try {
+    const host = new URL(endpoint).hostname;
+    if (host.endsWith('workers.dev')) return 'Geodesia edge';
+    if (host.includes('open-meteo')) return 'Open-Meteo';
+    return host;
+  } catch {
+    return 'elevation service';
+  }
 }
 
 function cacheKey(point: LatLon): string {
@@ -98,10 +118,14 @@ function parseElevations(payload: unknown, expected: number): number[] {
   return raw.map((value) => (typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN));
 }
 
-async function requestBatch(points: ReadonlyArray<LatLon>, signal?: AbortSignal): Promise<number[]> {
+async function requestBatchFromEndpoint(
+  endpoint: string,
+  points: ReadonlyArray<LatLon>,
+  signal?: AbortSignal,
+): Promise<number[]> {
   const latitude = points.map((point) => point.lat.toFixed(6)).join(',');
   const longitude = points.map((point) => point.lon.toFixed(6)).join(',');
-  const url = `${ELEVATION_ENDPOINT}?latitude=${latitude}&longitude=${longitude}`;
+  const url = `${endpoint}?latitude=${latitude}&longitude=${longitude}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -139,17 +163,17 @@ function trimCache(): void {
 
 /**
  * Fetch elevations for a path. Resolves with one entry per input point, in
- * order. Never rejects for a service failure unless every batch failed and the
- * caller needs to know; partial results are always returned.
+ * order. Partial results are always returned; the caller decides whether the
+ * interpolation gap is acceptable.
  */
 export async function fetchElevations(
   points: ReadonlyArray<LatLon>,
   options: ElevationFetchOptions = {},
 ): Promise<ElevationFetchResult> {
-  const { signal, onProgress, retries = 2 } = options;
+  const { signal, onProgress, retries = DEFAULT_RETRIES } = options;
 
   if (points.length === 0) {
-    return { elevations: [], failedBatches: 0, fromCache: 0 };
+    return { elevations: [], failedBatches: 0, fromCache: 0, endpoint: null };
   }
 
   for (const point of points) {
@@ -192,7 +216,7 @@ export async function fetchElevations(
   onProgress?.({ total: points.length, completed, fromCache });
 
   if (pending.size === 0) {
-    return { elevations, failedBatches: 0, fromCache };
+    return { elevations, failedBatches: 0, fromCache, endpoint: null };
   }
 
   const unique = [...pending.values()];
@@ -201,23 +225,28 @@ export async function fetchElevations(
     batches.push(unique.slice(start, start + MAX_POINTS_PER_REQUEST));
   }
 
+  const endpoints = ELEVATION_ENDPOINTS.length > 0 ? ELEVATION_ENDPOINTS : [''];
+  const attemptsPerBatch = Math.max(1, retries + 1) * endpoints.length;
+
   let failedBatches = 0;
+  let usedEndpoint: string | null = null;
 
   for (const batch of batches) {
     throwIfAborted(signal);
 
     let values: number[] | null = null;
-    for (let attempt = 0; attempt <= retries; attempt += 1) {
+    for (let attempt = 0; attempt < attemptsPerBatch; attempt += 1) {
+      const endpoint = endpoints[attempt % endpoints.length] ?? endpoints[0];
       try {
-        values = await requestBatch(
-          batch.map((entry) => entry.point),
-          signal,
-        );
+        values = await requestBatchFromEndpoint(endpoint, batch.map((entry) => entry.point), signal);
+        usedEndpoint = endpoint;
         break;
       } catch {
         if (signal?.aborted) throw abortSignalError();
-        if (attempt < retries) await delay(350 * 2 ** attempt, signal);
-        else values = null;
+        if (attempt < attemptsPerBatch - 1) {
+          const round = Math.floor(attempt / endpoints.length);
+          await delay(350 * 2 ** round, signal);
+        }
       }
     }
 
@@ -235,10 +264,13 @@ export async function fetchElevations(
       failedBatches += 1;
     }
 
-    completed = Math.min(points.length, completed + batch.reduce((sum, entry) => sum + entry.indexes.length, 0));
+    completed = Math.min(
+      points.length,
+      completed + batch.reduce((sum, entry) => sum + entry.indexes.length, 0),
+    );
     onProgress?.({ total: points.length, completed, fromCache });
   }
 
   trimCache();
-  return { elevations, failedBatches, fromCache };
+  return { elevations, failedBatches, fromCache, endpoint: usedEndpoint };
 }

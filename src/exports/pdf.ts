@@ -1024,6 +1024,19 @@ export async function buildPDF(spec: PdfReportSpec): Promise<Uint8Array> {
     }
   }
 
+  /* `ExportMeta.notes` are contractually printed at the end of the report
+   * (method statements, warnings, provenance). Emit them after the sections;
+   * label them distinctly when the caller also supplied a notes section. */
+  const metaNotes = spec.meta.notes ?? [];
+  if (metaNotes.length > 0) {
+    const hasNotesSection = spec.sections.some((section) => section.kind === 'notes');
+    drawNotesSection(ctx, {
+      kind: 'notes',
+      heading: hasNotesSection ? 'Report notes' : 'Notes',
+      lines: metaNotes,
+    });
+  }
+
   drawFooters(ctx);
   applyMetadata(ctx, spec.documentTitle);
 

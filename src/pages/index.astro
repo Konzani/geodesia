@@ -27,16 +27,20 @@ const faqs = [
     a: 'Nowhere. Coordinates you paste, files you drop and results you compute stay in the browser tab — there is no upload step and no analytics or tracking script on the site. Two lookups do leave the device by design: map tiles from OpenStreetMap and elevation samples from the Open-Meteo elevation endpoint. Everything else, including all arithmetic, is local.',
   },
   {
-    q: 'Which datum and ellipsoid are used?',
-    a: 'Geodesic calculations use WGS 84 with the defining constants a = 6 378 137 m and 1/f = 298.257223563. Local Cartesian input is treated as a planar grid in metres with no implied projection, which is what a total station or CAD drawing gives you; you can paste any projected easting/northing pair as long as the units are metres.',
+    q: 'Which datum, ellipsoid and projection are used?',
+    a: 'Geodesic calculations use WGS 84 with the defining constants a = 6 378 137 m and 1/f = 298.257223563. UTM coordinates are handled on WGS 84 transverse Mercator for any zone 1–60 in either hemisphere (false easting 500 000 m, false northing 10 000 000 m south, k0 = 0.9996), and local X/Y input is treated as a planar grid in metres with no implied projection.',
   },
   {
-    q: 'Should I trust the planar area or the geodesic area?',
-    a: 'Both are correct, of different questions. The Gaussian shoelace result is exact for the numbers as drawn on your planar grid, so it is the right check against a plan or a CAD parcel. The geodesic result is the area on the ellipsoid and is the one to quote for ground area over any meaningful extent. The tools print both, plus the difference, so you can see whether the projection is distorting your parcel.',
+    q: 'Should I quote the grid, geodesic or ground area?',
+    a: 'They answer different questions, so all three are printed. The grid area is the shoelace result on the projected coordinates — the figure that matches a plan, a CAD parcel or a UTM schedule. The geodesic area is the area on the ellipsoid and is the right figure for any statement about the land itself. The ground area divides the grid area by the combined scale factor squared (CSF = k · a/(a + h)), which is the figure a surveyor quotes after projection and elevation are removed. The difference between them is diagnostic: if it is larger than you expect, the projection or elevation assumption is wrong.',
+  },
+  {
+    q: 'Can I paste UTM coordinates straight from a total station or Google Earth?',
+    a: 'Yes — switch the reference system to UTM, set the zone and hemisphere, and paste easting, northing pairs one per line (CSV, tabs, or a spreadsheet paste all work). The tool measures the grid area and perimeter from those numbers directly, converts them to WGS 84 to add the geodesic and ground surfaces, and plots the ring on a coordinate sheet so a transposed pair or a missing corner is visible. Keep the whole parcel inside one zone: crossing a zone boundary puts the ring on two projections and the grid area stops being meaningful.',
   },
   {
     q: 'What does the terrain profile actually compute?',
-    a: 'It accumulates geodesic distance between sampled stations along your line, differences the sampled elevations to get climb and descent, then derives gradient and a slope classification from each station-to-station segment. You get total distance, gain, descent, net change, minimum and maximum elevation, mean elevation, average and maximum gradient, and a station table that every headline figure can be traced back to.',
+    a: 'It accumulates geodesic distance between sampled stations along your line, differences the sampled elevations to get climb and descent, then derives gradient and a slope classification from each station-to-station segment. You get total distance, gain, descent, net change, minimum and maximum elevation, mean elevation, average and maximum gradient, and a station table that every headline figure can be traced back to. Elevations come from the Geodesia edge elevation service, with Open-Meteo as the fallback, so a survey sheet you upload is always the more authoritative source.',
   },
   {
     q: 'What can I export, and is it usable in a report?',
@@ -125,8 +129,8 @@ const features = [
         <p class="hero__note">
           <span>Karney geodesics</span>
           <span>Gaussian shoelace</span>
+          <span>UTM 1–60 · CSF ground area</span>
           <span>pdf-lib reports</span>
-          <span>No tracking scripts</span>
         </p>
       </div>
 
@@ -206,6 +210,21 @@ const features = [
               as inverse geodesic distances with forward and back azimuths, so the result is the
               area on the ground rather than on a projection. A spherical approximation is not
               adequate at cadastral scale; it is deliberately not offered.
+            </p>
+          </div>
+
+          <div class="formula">
+            <p class="formula__name">Projected grid · UTM &amp; combined scale factor</p>
+            <p class="formula__body">
+              k = k<sub>0</sub> · (1 + <var>x</var>²/(2<var>R</var>²))   ·   CSF = k ·
+              <var>a</var>/(<var>a</var> + <var>h</var>)   ·   A<sub>ground</sub> = A<sub>grid</sub> / CSF²
+            </p>
+            <p class="formula__note">
+              UTM eastings and northings from any zone (1–60, hemisphere-aware) are measured on the
+              projected grid. The combined scale factor comes from the parcel’s distance to the
+              central meridian (x) and the mean elevation (h), or from a survey-supplied value; ground
+              area is the grid area divided by CSF², which is why the figure on a plan and the figure
+              on the ground are not the same hectare.
             </p>
           </div>
 

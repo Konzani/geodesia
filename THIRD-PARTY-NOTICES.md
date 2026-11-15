@@ -19,6 +19,11 @@ product. It is documentation, not legal advice.
 
 ### Notes
 
+- **No projection library is bundled.** UTM forward/inverse is the in-house Krüger order-6
+  series in `src/math/utm.ts`. `proj4` appears only as a **development dependency**, imported
+  by `scripts/verify-accuracy.mjs` as an independent oracle for the test run — it is never
+  referenced by `src/`, never bundled, and no proj4 chunk is emitted by the build.
+
 - **SheetJS xlsx 0.18.5** is the last version published to the public npm registry; later
   releases are distributed by SheetJS directly. It is used only to read a spreadsheet the
   user selects, runs entirely client-side, and is loaded lazily on first XLSX upload — it is
@@ -33,8 +38,15 @@ product. It is documentation, not legal advice.
 
 | Service | Use | Required attribution / terms |
 | --- | --- | --- |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) tiles | Basemap for the map panels | `© OpenStreetMap contributors` — shown in the Leaflet attribution control. Tile usage subject to the [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/). |
-| [Open-Meteo Elevation API](https://open-meteo.com/en/docs/elevation-api) | Sampled ground elevations in map mode | Free for non-commercial use; data derived from public DEM sources. Attribution shown in the instrument copy and the PDF report notes. |
+| [Thunderforest](https://www.thunderforest.com/) map tiles (via the Geodesia Cloudflare Worker) | Basemap for the map panels | `Maps © Thunderforest · Data © OpenStreetMap contributors` — rendered in the Leaflet attribution control. The worker is operated by Geodesia and caches tiles at Cloudflare's edge (`Cache-Control: immutable`) so requests do not hit the provider's origin on every view. |
+| [Esri ArcGIS](https://www.esri.com/en-us/arcgis/products/arcgis-online/overview) raster tiles | First automatic basemap fallback | `Tiles © Esri — Esri, HERE, Garmin, USGS, NGA, and the GIS user community` |
+| [CARTO basemaps](https://carto.com/attributions) | Second basemap fallback | `© OpenStreetMap contributors © CARTO` |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) tiles | Final basemap fallback | `© OpenStreetMap contributors`, per the [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/). Last resort only; the Geodesia edge cache and the service worker keep traffic away from this endpoint. |
+| [Open-Meteo Elevation API](https://open-meteo.com/en/docs/elevation-api) | Elevation fallback when the Geodesia edge service is unavailable | Free for non-commercial use; data derived from public DEM sources. Attribution shown in the PDF report notes. |
+
+The client also installs a service worker (`public/sw.js`) that keeps its own bounded cache of
+map tiles and hashed build assets on the user's device. That cache is local to the browser, is
+never shared, and can be cleared by the user at any time.
 
 Geodesia does not bundle or redistribute map tiles, elevation data or any other third-party
 dataset — those are fetched by the browser at run time, by the user's own client.

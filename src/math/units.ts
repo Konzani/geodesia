@@ -19,7 +19,7 @@
  *
  * Pure functions only. Unknown units and non-finite values throw an `Error`.
  */
-import type { AreaUnitDef, ConversionRow, UnitGroup } from './types';
+import type { AreaUnitDef, AreaUnits, ConversionRow, UnitGroup } from './types';
 
 const ACRE_M2 = 4046.8564224;
 
@@ -121,4 +121,18 @@ export function areaFromDimensions(width: number, length: number, unit: 'm' | 'f
   const factor = unit === 'ft' ? 0.3048 : 1;
   const metres = width * factor * length * factor;
   return metres;
+}
+
+/** Convert a square-metre magnitude into the full unit set. */
+export function toAreaUnits(m2: number): AreaUnits {
+  assertFiniteValue(m2, 'Area in square metres');
+  return {
+    m2,
+    ha: m2 / findAreaUnit('ha').factor,
+    acres: m2 / findAreaUnit('acres').factor,
+    km2: m2 / findAreaUnit('km2').factor,
+    ft2: m2 / findAreaUnit('ft2').factor,
+    roods: m2 / findAreaUnit('roods').factor,
+    guntas: m2 / findAreaUnit('guntas').factor,
+  };
 }

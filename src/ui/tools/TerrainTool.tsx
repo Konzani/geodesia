@@ -6,7 +6,8 @@
  *   2. a clicked vertex route (or freehand drag) on the map;
  *   3. an uploaded CSV / TXT / TSV / XLSX table (distance+elevation or lat/lon+elevation).
  *
- * Elevations come from the Open-Meteo elevation API (batched, cached, retried)
+ * Elevations come from the configured elevation endpoint chain (Geodesia edge
+ * worker first, then Open-Meteo; batched, cached, retried)
  * with an explicit, designed failure state that keeps uploaded data usable.
  * Every rendered number goes through `src/math/format`; heavy libraries are
  * never imported here (map = dynamic import in MapCanvas, xlsx = dynamic import
@@ -46,9 +47,10 @@ import {
 } from '../components/ui';
 import type { BadgeTone, DataTableColumn } from '../components/ui';
 import { MapCanvas } from './MapCanvas';
-import type { MapCanvasApi, MapMarker } from './MapCanvas';
+import type { BasemapChange, MapCanvasApi, MapMarker } from './MapCanvas';
+import { MAP_DEFAULT_VIEW } from './basemap';
 import { ProfileChart } from './ProfileChart';
-import { fetchElevations } from './elevation';
+import { describeElevationEndpoint, fetchElevations } from './elevation';
 import {
   IconCrosshair,
   IconDownload,
@@ -93,8 +95,8 @@ interface StationRow {
   longitude: string;
 }
 
-const DEFAULT_CENTER: LatLon = { lat: -1.2864, lon: 36.8172 };
-const DEFAULT_ZOOM = 12;
+const DEFAULT_CENTER: LatLon = MAP_DEFAULT_VIEW.center;
+const DEFAULT_ZOOM = MAP_DEFAULT_VIEW.zoom;
 const SAMPLE_MIN = 20;
 const SAMPLE_MAX = 200;
 const DEFAULT_SAMPLES = 64;
@@ -203,6 +205,8 @@ export default function TerrainTool() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [statusMessage, setStatusMessage] = useState('');
   const [mapError, setMapError] = useState<string | null>(null);
+  const [basemap, setBasemap] = useState<BasemapChange | null>(null);
+  const [elevationSource, setElevationSource] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [exporting, setExporting] = useState<ExportKind | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -299,13 +303,16 @@ export default function TerrainTool() {
         setRawSamples(samples);
         setWarnings(nextWarnings);
         setPhase('ready');
+        const elevationLabel = describeElevationEndpoint(result.endpoint);
+        setElevationSource(result.endpoint === null ? null : elevationLabel);
         setStatusMessage(
-          `Profile ready: ${fmtNumber(samples.length, 0)} stations over ${fmtLength(finalSample?.distance ?? 0, 'km')}.`,
+          `Profile ready: ${fmtNumber(samples.length, 0)} stations over ${fmtLength(finalSample?.distance ?? 0, 'km')} · elevations via ${elevationLabel}.`,
         );
       } catch (error) {
         if (cancelled || isAbortError(error)) return;
         setRawSamples(null);
         setPhase('error');
+        setElevationSource(null);
         setFetchError(errorMessage(error));
         setStatusMessage('Elevation lookup failed. Uploaded data and coordinate entry are still available.');
       }
@@ -688,7 +695,7 @@ export default function TerrainTool() {
             'Geodesia — Terrain Profile',
             `Source: ${sourceLabel}`,
             `Generated: ${timestamp()}`,
-            'Method: WGS 84 geodesic line sampling; elevations from Open-Meteo',
+            'Method: WGS 84 geodesic line sampling; elevations from the Geodesia edge / Open-Meteo chain',
           ],
         );
       } else if (kind === 'json') {
@@ -698,7 +705,7 @@ export default function TerrainTool() {
             {
               tool: 'Terrain Profile',
               title: 'Terrain elevation profile',
-              method: 'WGS 84 geodesic line sampling; Open-Meteo elevation service',
+              method: 'WGS 84 geodesic line sampling; elevations from the Geodesia edge / Open-Meteo chain',
               parameters: Object.fromEntries(exportParameters().map((entry) => [entry.label, entry.value])),
               notes: warnings,
             },
@@ -716,7 +723,7 @@ export default function TerrainTool() {
             subtitle: sourceLabel,
             parameters: exportParameters(),
             notes: [
-              'Elevations are sourced from the Open-Meteo elevation API and are indicative, not survey-grade.',
+              'Elevations are sourced from the configured elevation services and are indicative, not survey-grade.',
               ...warnings,
             ],
           },
@@ -1007,8 +1014,10 @@ export default function TerrainTool() {
             </div>
           </div>
           <p className="tool-hint">
-            Elevations are fetched in batches of {fmtNumber(100, 0)} from Open-Meteo and cached for
-            this session. A failed lookup never discards your input.
+            Elevations are fetched in batches of {fmtNumber(100, 0)} from the Geodesia edge service
+            first, then Open-Meteo, and cached for this session. A failed lookup never discards your
+            input.
+            {elevationSource ? ` Last lookup: ${elevationSource}.` : ''}
           </p>
         </Panel>
       </div>
@@ -1017,7 +1026,7 @@ export default function TerrainTool() {
       <div className="tool__main">
         <Panel
           title="Map"
-          meta={inputMode === 'upload' ? 'Uploaded trace' : 'OSM · WGS 84'}
+          meta={inputMode === 'upload' ? 'Uploaded trace' : (basemap?.label ?? 'WGS 84 basemap')}
           tight
           actions={
             <Toolbar label="Map actions">
@@ -1037,6 +1046,7 @@ export default function TerrainTool() {
             onMapClick={handleMapClick}
             onStrokeDrawn={handleStrokeDrawn}
             onMapError={handleMapError}
+            onBasemapChange={setBasemap}
             onReady={handleMapReady}
             ariaLabel="Terrain profile map: set endpoints or draw a route"
           >
@@ -1235,7 +1245,7 @@ export default function TerrainTool() {
               </span>
             </div>
             <div className="chart-loading__body">
-              <p className="chart-loading__text">Sampling elevations from Open-Meteo…</p>
+              <p className="chart-loading__text">Sampling elevations from the configured services…</p>
               <div
                 className="progress"
                 role="progressbar"

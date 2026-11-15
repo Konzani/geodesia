@@ -123,49 +123,12 @@ export declare function perimeter2D(points: XYPoint[]): number;
 export declare function centroid2D(points: XYPoint[]): XYPoint;
 
 /* ------------------------------------------------------------------------- */
-/* area.ts                                                                    */
+/* polygon area (v2 API lives in `./polygon-types.ts`)                        */
 /* ------------------------------------------------------------------------- */
 
-export type AreaMode = 'xy' | 'latlon';
-
-export interface AreaSegment {
-  index: number;
-  from: string;
-  to: string;
-  planDistance: number;
-  geodesicDistance: number | null;
-  bearing: number | null;
-}
-
-export interface AreaResult {
-  mode: AreaMode;
-  vertexCount: number;
-  /** Planar shoelace area (m²). */
-  planarArea: number;
-  planarPerimeter: number;
-  /** Geodesic area (m²) on WGS 84; `null` for Cartesian input. */
-  geodesicArea: number | null;
-  geodesicPerimeter: number | null;
-  /** Planar/geodesic closure error in metres (0 for a closed ring). */
-  closure: number;
-  centroid: Vertex;
-  units: AreaUnits;
-  segments: AreaSegment[];
-  warnings: string[];
-}
-
-/** Full polygon-area computation for both supported input modes. */
-export declare function computePolygonArea(
-  input:
-    | {
-        mode: 'xy';
-        points: XYPoint[];
-      }
-    | {
-        mode: 'latlon';
-        points: LatLon[];
-      },
-): AreaResult;
+/* The v1 `AreaResult` / `computePolygonArea` surface was replaced by
+   `computePolygon` in `./polygon-types.ts` (three reference systems: local
+   X/Y, UTM, geographic; three surfaces: grid, geodesic, ground). */
 
 /** Convert a square-metre magnitude into the full unit set. */
 export declare function toAreaUnits(m2: number): AreaUnits;

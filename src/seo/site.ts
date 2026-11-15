@@ -94,24 +94,25 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     name: 'Polygon Area & Coordinate Engine',
     shortName: 'Area',
     eyebrow: 'Instrument 02 · Area',
-    metaTitle: 'Polygon Area Calculator from X/Y or Lat/Long | Geodesia',
+    metaTitle: 'Polygon Area Calculator — UTM, X/Y or Lat/Long | Geodesia',
     metaDescription:
-      'Compute land area from X/Y metres or WGS 84 latitude/longitude in decimal or DMS. Gaussian shoelace and geodesic area, closure, bearings, unit breakdown.',
-    h1: 'Polygon area calculator from survey coordinates',
+      'Compute land area from UTM eastings and northings, local X/Y metres, or WGS 84 lat/long in decimal or DMS — grid, geodesic and ground areas with closure.',
+    h1: 'Parcel area from UTM, local grid or geographic coordinates',
     lede:
-      'Paste or click in a parcel boundary. Geodesia closes the ring, evaluates it twice — planar shoelace on the grid and geodesic area on the WGS 84 ellipsoid — then reports the closure error so you know the boundary is sound.',
+      'Paste the boundary exactly as it came off the instrument — UTM eastings and northings, a local X/Y grid, or WGS 84 latitude and longitude in decimal or DMS — and Geodesia returns the grid, geodesic and ground areas with every leg checked.',
     keywords: [
       'polygon area calculator',
+      'UTM area calculator',
+      'area from utm coordinates',
       'land area calculator coordinates',
       'shoelace formula calculator',
       'geodesic area WGS84',
-      'area from latitude longitude',
-      'DMS coordinate area',
+      'grid area ground area CSF',
       'cadastral area calculator',
       'hectares acres square feet',
     ],
     blurb:
-      'Verify a parcel boundary: Gaussian shoelace area, WGS 84 geodesic area, perimeter, closure, bearings and a full unit breakdown.',
+      'Parcel area from UTM, X/Y or lat/long: grid, geodesic and ground surfaces, per-leg checks, closure and a full unit breakdown.',
   },
   converter: {
     id: 'converter',
@@ -241,12 +242,16 @@ export const ENGINE = {
   name: 'Geodesia',
   datum: 'WGS 84',
   ellipsoid: 'WGS 84 (a = 6 378 137 m, 1/f = 298.257223563)',
+  projection: 'UTM — WGS 84 transverse Mercator, zone 1–60, hemisphere-aware, FE 500 000 m, FN 10 000 000 m south, k0 = 0.9996',
   areaMethods: [
-    'Gaussian shoelace (planar trapezoid) on Cartesian X/Y in metres',
-    'Geodesic polygon area on the WGS 84 ellipsoid (Karney series)',
+    'Grid area: Gaussian shoelace (planar trapezoid) on projected X/Y or UTM coordinates in metres',
+    'Geodesic area: ellipsoidal polygon area on WGS 84 (Karney series)',
+    'Ground area: grid area reduced by the combined scale factor, CSF = k · EF',
   ],
-  distanceMethods: 'Inverse geodesic on WGS 84; planar Pythagorean distance for X/Y input',
+  distanceMethods:
+    'Inverse geodesic on WGS 84 for the ellipsoidal surface; planar distance and grid bearing on projected UTM or X/Y coordinates',
   runtime: 'Browser (client-side; no data leaves the device)',
+  basemap: 'Geodesia edge tile cache (Thunderforest topo over OpenStreetMap data) with Esri / CARTO / OSM fallbacks',
   exports: ['CSV', 'JSON (schema geodesia.report/v1)', 'PDF field report (pdf-lib)'],
 } as const;
 

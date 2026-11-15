@@ -28,10 +28,15 @@ the browser tab from the numbers you enter.
    net change, min/max/mean elevation, per-station gradient, maximum gradient with the
    station it occurs at, and a slope classification — plus an interactive SVG profile,
    a station table and CSV/JSON/PDF export.
-2. **Polygon Area & Coordinate Engine** — accepts local Cartesian `X, Y` (metres) and
-   WGS 84 `lat, lon` in decimal or DMS. Evaluates the ring twice: verified Gaussian
-   shoelace planar area and an independent geodesic area on the WGS 84 ellipsoid, with
-   perimeter, closure error, centroid, per-leg distance/bearing and a full unit breakdown.
+2. **Polygon Area & Coordinate Engine** — accepts the three coordinate systems a surveyor
+   actually receives: local Cartesian `X, Y` (metres), **UTM eastings/northings** (zone 1–60,
+   hemisphere-aware), and WGS 84 `lon, lat` in decimal or DMS (auto-projected to its UTM zone
+   for grid work). Returns the **grid** surface (Gaussian shoelace on projected metres), the
+   **geodesic** surface (Karney ellipsoidal area), and the **ground** surface (grid ÷ CSF²,
+   using a combined scale factor estimated from the parcel's distance to the central meridian
+   and mean elevation, or a surveyed override) — plus closure, centroid, per-leg grid/geodesic/
+   ground distances and bearings, self-intersection detection and the full unit breakdown.
+   Projected data is plotted on a white coordinate sheet; geographic data is digitised on the map.
 3. **Land Area Unit Converter** — one value in, every unit out: metric, imperial and the
    Kenyan cadastral/agricultural set (gunta, rood, decimal), with exact factors and a
    width × length dimension helper.
@@ -53,26 +58,43 @@ Every tool exports three artefacts, all generated client-side:
 
 ```
 src/
-├─ math/        pure TypeScript geodesy — WGS 84, Gaussian shoelace, terrain statistics,
-│               unit tables, RFC 4180 / XLSX ingestion. No DOM, no network.
+├─ math/        pure TypeScript geodesy — WGS 84, UTM (Krüger order-6 transverse Mercator,
+│               dependency-free), Gaussian shoelace, combined scale factor, terrain
+│               statistics, unit tables, RFC 4180 / XLSX ingestion. No DOM, no network.
 ├─ ui/
 │   ├─ styles/  tokens.css (design system) · base.css · components.css · tools.css
 │   ├─ components/  Astro shell (header, footer, mark, hero figure) + React primitives
 │   ├─ tools/   React islands: Workspace, TerrainTool, PolygonTool, ConverterTool,
-│   │           MapCanvas, ProfileChart
+│   │           MapCanvas, PlotSurface, ProfileChart · basemap.ts (tile + elevation sources)
 │   └─ hub/     HubFilter — the ecosystem app directory
 ├─ exports/     CSV / JSON / PDF (pdf-lib) generators
 ├─ seo/         site.ts (metadata source of truth), schema.ts (JSON-LD), content/*
 ├─ layouts/     BaseLayout (head, fonts, JSON-LD), ToolPage (data-driven SEO template)
 └─ pages/       index, terrain-profile, polygon-area, land-unit-converter, about, 404
-public/         brand SVGs + raster icons, Open Graph card, robots.txt, manifest
+public/         brand SVGs + raster icons, Open Graph card, robots.txt, manifest, sw.js
 scripts/        brand asset generator, static output QA harness
 LICENSE         proprietary licence
 THIRD-PARTY-NOTICES.md  bundled licences and data attributions
 ```
 
 **Stack:** Astro 7 (static output) · React 19 islands · TypeScript strict · Leaflet (lazy) ·
-GeographicLib geodesics · pdf-lib · SheetJS · self-hosted IBM Plex.
+dependency-free UTM (Krüger series) · GeographicLib geodesics · pdf-lib · SheetJS ·
+self-hosted IBM Plex.
+
+### Basemap and tile caching
+
+Map tiles come from the **Geodesia edge tile service** (a Cloudflare Worker that proxies a
+Thunderforest topo style over OpenStreetMap data, `Cache-Control: immutable`, CORS `*`). The
+worker, not a third-party free tier, absorbs traffic: tiles are cached at Cloudflare's edge for
+a year. If it is unreachable the map falls back in order to Esri World Topographic, CARTO
+Positron and OpenStreetMap.
+
+On top of that, `public/sw.js` installs a bounded service-worker cache
+(`geodesia-tiles-v4`, 1500 tiles; `geodesia-assets-v4`, 120 assets) with cache-first
+semantics for tiles and hashed build assets, and network-first for HTML navigations so a deploy
+is picked up immediately. A returning visitor answers map requests from their own disk before
+the network is touched. Elevation sampling uses the same edge service first, with Open-Meteo
+direct as the fallback, batched at 100 coordinates per request and memoised per session.
 
 ### Why static pre-rendering
 
@@ -123,12 +145,15 @@ the generated Open Graph card.
 
 ```bash
 npm install
-npm run dev          # http://localhost:4321
-npm run build        # static site → dist/
-npm run preview      # serve the built output
-npm run test:math    # vitest — geodetic, shoelace, terrain and parser tests
-npm run brand        # regenerate icons + Open Graph card (needs sharp)
-node scripts/check-output.mjs   # static SEO / link / bundle audit of dist/
+npm run dev            # http://localhost:4321
+npm run build          # static site → dist/
+npm run preview        # serve the built output
+npm test               # vitest — 9 suites: geodesy, UTM/Krüger, polygon surfaces, terrain,
+                       #   units, parsers, exports (PDF/CSV/JSON) and the basemap chain
+npm run qa:accuracy    # independent UTM/area/CSF accuracy verification (45 assertions)
+npm run qa             # static SEO / link / CSP / service-worker / bundle audit of dist/
+npm run verify         # all of the above in order: tests → accuracy → build → audit
+npm run brand          # regenerate icons + Open Graph card (needs sharp)
 ```
 
 Node **≥ 22.23.4** is required (Astro 7 and Vite). A `.nvmrc` is included, and

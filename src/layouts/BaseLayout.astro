@@ -150,5 +150,17 @@ const schemaDoc = schemas.length > 0 ? graph(...schemas) : null;
       </main>
       <SiteFooter />
     </div>
+
+    <!-- Service worker: local map-tile + asset cache (see public/sw.js).
+         Registered on https only, after load, so it never competes with LCP. -->
+    <script is:inline>
+      if ('serviceWorker' in navigator && location.protocol === 'https:') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {
+            /* registration is an enhancement — never block the app on it */
+          });
+        });
+      }
+    </script>
   </body>
 </html>

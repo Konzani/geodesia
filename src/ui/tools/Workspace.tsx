@@ -2,16 +2,20 @@
  * GEODESIA — instrument workspace shell.
  *
  * The single island mounted by every page: a real WAI-ARIA tablist with roving
- * tabindex, arrow/Home/End keyboard navigation, optional URL-hash deep links,
- * and all three instruments kept mounted so switching tabs never loses state.
- * SSR renders the tablist and the terrain panel; effects guard `window`.
+ * tabindex, arrow/Home/End keyboard navigation, optional URL-hash deep links.
+ *
+ * Bundle shape: Terrain Profile is statically imported (default tab, SSR'd and
+ * immediately interactive); Polygon and Converter are `React.lazy` chunks that
+ * are only requested when their tab is first opened (or after hydration when a
+ * page passes `initialTab`), with a designed PanelSkeleton and an error
+ * boundary + retry if the chunk download fails. No `window` in the factories.
  */
-import { useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import type { ComponentType, KeyboardEvent } from 'react';
 import '../styles/tools.css';
-import ConverterTool from './ConverterTool';
-import PolygonTool from './PolygonTool';
+import { PanelSkeleton } from '../components/ui';
 import TerrainTool from './TerrainTool';
+import { ToolChunkBoundary } from './ToolChunkBoundary';
 import { IconGrid, IconPolygon, IconTerrain } from './icons';
 
 export type WorkspaceTab = 'terrain' | 'polygon' | 'converter';
@@ -33,6 +37,10 @@ const TABS: ReadonlyArray<TabDefinition> = [
   { id: 'converter', label: 'Land converter', index: '03' },
 ];
 
+/** Lazy factories must stay pure: no window/document access inside them. */
+const createPolygonLoader = (): ComponentType => lazy(() => import('./PolygonTool'));
+const createConverterLoader = (): ComponentType => lazy(() => import('./ConverterTool'));
+
 function isWorkspaceTab(value: string): value is WorkspaceTab {
   return TABS.some((tab) => tab.id === value);
 }
@@ -42,7 +50,18 @@ export default function Workspace({ initialTab = 'terrain' }: WorkspaceProps) {
   // Instruments mount on first use (state is kept after that), so hidden tabs
   // never initialise a Leaflet map or fetch anything before they are opened.
   const [mounted, setMounted] = useState<ReadonlyArray<WorkspaceTab>>([initialTab]);
+  // Lazy component refs are regenerated on retry so a rejected import promise
+  // is not cached forever.
+  const [polygonTool, setPolygonTool] = useState<ComponentType>(createPolygonLoader);
+  const [converterTool, setConverterTool] = useState<ComponentType>(createConverterLoader);
+  // Render tool chunks only after hydration: SSR never suspends on a lazy
+  // module, and server markup (skeleton) matches the first client render.
+  const [hydrated, setHydrated] = useState(false);
   const tabRefs = useRef<Partial<Record<WorkspaceTab, HTMLButtonElement | null>>>({});
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const ensureMounted = (tab: WorkspaceTab) => {
     setMounted((previous) => (previous.includes(tab) ? previous : [...previous, tab]));
@@ -103,6 +122,10 @@ export default function Workspace({ initialTab = 'terrain' }: WorkspaceProps) {
 
   const activeLabel = TABS.find((tab) => tab.id === active)?.label ?? '';
 
+  // Capitalised aliases so JSX treats the lazy loaders as components.
+  const PolygonToolLazy = polygonTool;
+  const ConverterToolLazy = converterTool;
+
   return (
     <div className="workspace__frame" data-active-tab={active}>
       <div className="workspace__topbar">
@@ -159,8 +182,34 @@ export default function Workspace({ initialTab = 'terrain' }: WorkspaceProps) {
           {mounted.includes(tab.id) ? (
             <>
               {tab.id === 'terrain' ? <TerrainTool /> : null}
-              {tab.id === 'polygon' ? <PolygonTool /> : null}
-              {tab.id === 'converter' ? <ConverterTool /> : null}
+              {tab.id === 'polygon' ? (
+                hydrated ? (
+                  <ToolChunkBoundary
+                    label="Polygon area"
+                    onRetry={() => setPolygonTool(createPolygonLoader())}
+                  >
+                    <Suspense fallback={<PanelSkeleton label="Loading polygon engine…" rows={4} />}>
+                      <PolygonToolLazy />
+                    </Suspense>
+                  </ToolChunkBoundary>
+                ) : (
+                  <PanelSkeleton label="Loading polygon engine…" rows={4} />
+                )
+              ) : null}
+              {tab.id === 'converter' ? (
+                hydrated ? (
+                  <ToolChunkBoundary
+                    label="Land converter"
+                    onRetry={() => setConverterTool(createConverterLoader())}
+                  >
+                    <Suspense fallback={<PanelSkeleton label="Loading land converter…" rows={3} />}>
+                      <ConverterToolLazy />
+                    </Suspense>
+                  </ToolChunkBoundary>
+                ) : (
+                  <PanelSkeleton label="Loading land converter…" rows={3} />
+                )
+              ) : null}
             </>
           ) : null}
         </div>

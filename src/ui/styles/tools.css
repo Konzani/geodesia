@@ -363,61 +363,223 @@
   text-align: center;
 }
 
-/* --------------------------------------------------- polygon sketch */
-.poly-sketch-shell {
-  display: grid;
-  place-items: center;
-  padding: var(--s-4);
+/* ------------------------------------------------ plot surface (paper) */
+/* The "white coordinate sheet": a survey-paper plotting surface, always light
+   regardless of theme, built entirely from palette primitives. */
+.plot-surface {
+  --plot-paper: var(--paper-50);
+  --plot-ink: var(--ink-900);
+  --plot-muted: var(--ink-400);
+  --plot-grid-minor: color-mix(in srgb, var(--ink-900) 7%, transparent);
+  --plot-grid-major: color-mix(in srgb, var(--ink-900) 16%, transparent);
+  --plot-axis: var(--ink-500);
+  --plot-accent: var(--signal-600);
+  --plot-fill: color-mix(in srgb, var(--signal-500) 12%, transparent);
+  --plot-centroid: var(--verdigris-600);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
   border: var(--bw-1) solid var(--line);
   border-radius: var(--r-md);
-  background: var(--bg-raised);
+  background: var(--plot-paper);
+  color: var(--plot-ink);
+  min-width: 0;
 }
 
-.poly-sketch {
+.plot-surface:focus-visible {
+  outline: var(--bw-2) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.plot-surface__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.plot-surface__title {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--plot-ink);
+}
+
+.plot-surface__meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--plot-muted);
+}
+
+.plot-surface__svg {
+  display: block;
   width: 100%;
   height: auto;
-  max-height: 320px;
 }
 
-.poly-sketch__grid line {
-  stroke: var(--data-grid);
+.plot-surface__sheet {
+  fill: var(--plot-paper);
+  stroke: var(--plot-grid-major);
+  stroke-width: 1;
+}
+
+.plot-surface__grid-minor line {
+  stroke: var(--plot-grid-minor);
   stroke-width: 1;
   shape-rendering: crispEdges;
 }
 
-.poly-sketch__ring {
-  fill: color-mix(in srgb, var(--data-primary) 12%, transparent);
-  stroke: var(--data-primary);
-  stroke-width: 1.5;
+.plot-surface__grid-major line {
+  stroke: var(--plot-grid-major);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.plot-surface__axis line {
+  stroke: var(--plot-axis);
+  stroke-width: 1.25;
+  shape-rendering: crispEdges;
+}
+
+.plot-surface__ticks text {
+  fill: var(--plot-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plot-surface__axis-label {
+  fill: var(--plot-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plot-surface__ring {
+  fill: var(--plot-fill);
+  stroke: var(--plot-accent);
+  stroke-width: 2;
   stroke-linejoin: round;
 }
 
-.poly-sketch__vertex circle {
-  fill: var(--accent);
-  stroke: var(--bg-raised);
-  stroke-width: 1.5;
+.plot-surface__leg {
+  stroke: color-mix(in srgb, var(--plot-accent) 55%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
 }
 
-.poly-sketch__label {
-  fill: var(--fg-faint);
+.plot-surface__leg-label {
+  fill: var(--plot-ink);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--plot-paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
-.poly-sketch__centroid circle {
-  fill: var(--bg-raised);
-  stroke: var(--accent);
+.plot-surface__vertex {
+  fill: var(--plot-paper);
+  stroke: var(--plot-accent);
+  stroke-width: 2;
+}
+
+.plot-surface__vertex-label {
+  fill: var(--plot-accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  paint-order: stroke;
+  stroke: var(--plot-paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.plot-surface__centroid circle {
+  fill: var(--plot-paper);
+  stroke: var(--plot-centroid);
   stroke-width: 1.5;
 }
 
-.poly-sketch__centroid line {
-  stroke: var(--accent);
+.plot-surface__centroid line {
+  stroke: var(--plot-centroid);
   stroke-width: 1;
 }
 
-.poly-sketch-empty {
+.plot-surface__centroid-label {
+  fill: var(--plot-centroid);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.plot-surface__annotation-box {
+  fill: color-mix(in srgb, var(--plot-paper) 88%, transparent);
+  stroke: var(--plot-grid-major);
+  stroke-width: 1;
+}
+
+.plot-surface__annotation-label {
+  fill: var(--plot-muted);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.plot-surface__annotation-value {
+  fill: var(--plot-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.plot-surface__north line {
+  stroke: var(--plot-ink);
+  stroke-width: 1;
+}
+
+.plot-surface__north polygon {
+  fill: var(--plot-ink);
+  stroke: none;
+}
+
+.plot-surface__north text {
+  fill: var(--plot-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+}
+
+.plot-surface__scalebar line {
+  stroke: var(--plot-ink);
+  stroke-width: 1.25;
+}
+
+.plot-surface__scalebar text {
+  fill: var(--plot-ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plot-surface--empty {
+  min-height: 220px;
+  justify-content: center;
+}
+
+.plot-surface__empty {
   padding: var(--s-9) var(--s-6);
   text-align: center;
+  border: var(--bw-1) dashed var(--plot-grid-major);
 }
 
 /* --------------------------------------------------- vertex table */
@@ -627,3 +789,105 @@
     display: none !important;
   }
 }
+
+/* ------------------------------------------- basemap status + polygon */
+.basemap-status {
+  margin: 0;
+  max-width: 260px;
+  padding: 2px var(--s-3);
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
+  box-shadow: var(--shadow-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.basemap-status--loading {
+  color: var(--fg-muted);
+}
+
+.basemap-status--ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 34%, transparent);
+}
+
+.basemap-status--fallback {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 36%, transparent);
+  background: var(--warn-soft);
+}
+
+.basemap-status--failed {
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 36%, transparent);
+  background: var(--err-soft);
+}
+
+.surface-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: var(--s-4);
+  align-items: stretch;
+}
+
+.issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.check__note {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.01em;
+  color: var(--fg-faint);
+  text-transform: none;
+}
+
+@media (max-width: 700px) {
+  .basemap-status {
+    max-width: 190px;
+  }
+}
+
+
+/* White sheet overrides for empty-state copy (keeps AA contrast on paper) */
+.plot-surface .empty__title {
+  color: var(--ink-700);
+}
+
+.plot-surface .empty__text {
+  color: var(--ink-500);
+}
+
+/* ----------------------------------------------- lazy instrument skeleton */
+.panel-skeleton .panel__body {
+  gap: var(--s-3);
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  border: var(--bw-1) solid var(--line-soft);
+  border-radius: var(--r-xs);
+  background: var(--bg-sunken);
+  animation: skeleton-pulse 1.5s var(--ease-in-out) infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+

@@ -1,17 +1,22 @@
 /**
- * GEODESIA — thin Leaflet wrapper.
+ * GEODESIA — resilient Leaflet wrapper.
  *
  * Leaflet touches `window` the moment it is imported, so it is loaded with a
  * dynamic `import()` inside an effect (CSS included) and never at module scope.
  * This module is SSR-safe: on the server it renders only the map shell and a
- * loading HUD, and the parent always offers coordinate entry as an alternative.
+ * loading status, and the parent always offers coordinate entry as an alternative.
  *
- * Visual language: hairline vector overlays coloured from design tokens rather
- * than hardcoded hex, OSM raster basemap, graceful "map unavailable" state.
+ * Basemap strategy: `TILE_PROVIDERS` (Geodesia edge worker first, then Esri topo,
+ * CARTO, OSM). If a provider keeps failing, the next one is mounted automatically
+ * with its own attribution, and the current source is always stated in a status
+ * pill — the map never silently shows an empty grey box. Vector overlays are
+ * coloured from design tokens, not hardcoded hex.
  */
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LatLon } from '../../math/types';
+import { MAP_DEFAULT_VIEW, TILE_PROVIDERS, TRANSPARENT_TILE } from './basemap';
+import { evaluateTileHealth, nextProviderIndex } from './basemap-chain';
 import { cx, tokenColor } from './utils';
 
 export type MapMode = 'pick-two' | 'draw' | 'polygon' | 'view';
@@ -22,6 +27,13 @@ export interface MapMarker {
   lon: number;
   kind?: MapPointKind;
   label?: string;
+}
+
+/** Result of the basemap provider chain, surfaced to the parent for status copy. */
+export interface BasemapChange {
+  id: string;
+  label: string;
+  status: 'loading' | 'ok' | 'fallback' | 'failed';
 }
 
 /** Imperative helpers handed to the parent once the map has initialised. */
@@ -45,8 +57,10 @@ export interface MapCanvasProps {
   onMapClick?: (point: LatLon) => void;
   /** Freehand stroke finished with 2+ points. */
   onStrokeDrawn?: (points: LatLon[]) => void;
-  /** Called when Leaflet or the basemap cannot load. */
+  /** Called when Leaflet or every basemap provider fails. */
   onMapError?: (message: string) => void;
+  /** Called whenever the active basemap provider changes. */
+  onBasemapChange?: (change: BasemapChange) => void;
   onReady?: (api: MapCanvasApi) => void;
   /** Overlays (HUDs, hints) rendered above the map inside the shell. */
   children?: ReactNode;
@@ -54,13 +68,12 @@ export interface MapCanvasProps {
   ariaLabel?: string;
 }
 
-const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const OSM_ATTRIBUTION =
-  '© <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors';
-
 type LeafletModule = typeof import('leaflet');
 
-/** Keep a freehand stroke under a sane vertex count before handing it to maths. */
+/** Tile failures (within a provider) required before switching to the next source. */
+/** Milliseconds to wait for a first tile before falling through to the next provider. */
+const PROVIDER_TIMEOUT_MS = 9_000;
+
 function decimatePath(points: LatLon[], maxPoints: number): LatLon[] {
   if (points.length <= maxPoints) return points;
   const stride = Math.ceil(points.length / maxPoints);
@@ -81,6 +94,7 @@ export function MapCanvas({
   onMapClick,
   onStrokeDrawn,
   onMapError,
+  onBasemapChange,
   onReady,
   children,
   className,
@@ -89,6 +103,7 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const leafletRef = useRef<LeafletModule | null>(null);
+  const initialisingRef = useRef(false);
   const markerLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const lineLayerRef = useRef<import('leaflet').Polyline | null>(null);
   const polygonLayerRef = useRef<import('leaflet').Polygon | null>(null);
@@ -96,14 +111,20 @@ export function MapCanvas({
   const [mapReady, setMapReady] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [themeVersion, setThemeVersion] = useState(0);
+  const [basemap, setBasemap] = useState<BasemapChange>({
+    id: TILE_PROVIDERS[0]?.id ?? 'none',
+    label: TILE_PROVIDERS[0]?.label ?? 'Basemap',
+    status: 'loading',
+  });
 
   // Latest props for long-lived Leaflet event handlers.
   const latest = useRef({
-    center: center ?? { lat: 20, lon: 0 },
-    zoom: zoom ?? 2,
+    center: center ?? MAP_DEFAULT_VIEW.center,
+    zoom: zoom ?? MAP_DEFAULT_VIEW.zoom,
     onMapClick,
     onStrokeDrawn,
     onMapError,
+    onBasemapChange,
     onReady,
   });
   latest.current = {
@@ -112,18 +133,39 @@ export function MapCanvas({
     onMapClick,
     onStrokeDrawn,
     onMapError,
+    onBasemapChange,
     onReady,
   };
 
   /* ---------------------------------------------------------------- mount */
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || mapRef.current || initialisingRef.current) return;
+    initialisingRef.current = true;
 
     let disposed = false;
     let map: import('leaflet').Map | null = null;
     let themeObserver: MutationObserver | null = null;
     let resizeCleanup: (() => void) | null = null;
+    let providerCleanup: (() => void) | null = null;
+    let providerIndex = 0;
+
+    const publish = (change: BasemapChange) => {
+      if (disposed) return;
+      setBasemap(change);
+      latest.current.onBasemapChange?.(change);
+    };
+
+    const failBasemap = (message: string) => {
+      const failedProvider = TILE_PROVIDERS[providerIndex];
+      setFailure(message);
+      publish({
+        id: failedProvider?.id ?? 'none',
+        label: failedProvider?.label ?? 'Basemap',
+        status: 'failed',
+      });
+      latest.current.onMapError?.(message);
+    };
 
     void (async () => {
       try {
@@ -138,47 +180,176 @@ export function MapCanvas({
           center: [start.center.lat, start.center.lon],
           zoom: start.zoom,
           minZoom: 2,
-          maxZoom: 19,
+          maxZoom: 20,
           zoomSnap: 0.5,
           worldCopyJump: true,
           keyboard: true,
           attributionControl: true,
-          zoomControl: true,
+          zoomControl: false,
         });
         mapRef.current = map;
 
-        const tiles = L.tileLayer(OSM_TILE_URL, {
-          maxZoom: 19,
-          attribution: OSM_ATTRIBUTION,
-          crossOrigin: true,
-        });
-        let tilesLoaded = 0;
-        let tileErrors = 0;
-        tiles.on('tileload', () => {
-          tilesLoaded += 1;
-        });
-        tiles.on('tileerror', () => {
-          tileErrors += 1;
-          if (tilesLoaded === 0 && tileErrors >= 5) {
-            const message = 'Basemap tiles could not be loaded.';
-            setFailure(message);
-            latest.current.onMapError?.(message);
-          }
-        });
-        tiles.addTo(map);
-
         markerLayerRef.current = L.layerGroup().addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
 
-        // Keep the map sized when it starts hidden in a tab panel or the layout
-        // reflows (the workspace keeps instruments mounted across tabs).
+        /* --------------------------------------------------- fit scheduling */
+        // Fit requests are deferred to the next animation frame with an
+        // invalidateSize first: the map can be mounted inside a 0-height hidden
+        // tab, and Leaflet computes bounds against the container size at call
+        // time. A pending fit is replayed once the first tile arrives too.
+        let pendingFit: { points: ReadonlyArray<LatLon>; padding: number } | null = null;
+        let fitFrame = 0;
+        let refitAfterTiles = false;
+
+        const performFit = () => {
+          if (!map || !pendingFit) return;
+          const { points, padding } = pendingFit;
+          if (points.length === 0) return;
+          if (points.length === 1) {
+            map.setView([points[0].lat, points[0].lon], Math.max(map.getZoom(), 13), { animate: false });
+            return;
+          }
+          const bounds = L.latLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
+          map.fitBounds(bounds, { padding: [padding, padding], maxZoom: 17, animate: false });
+        };
+
+        const requestFit = (points?: ReadonlyArray<LatLon>, padding = 32) => {
+          if (points) pendingFit = { points: [...points], padding };
+          if (!map) return;
+          cancelAnimationFrame(fitFrame);
+          map.invalidateSize();
+          fitFrame = requestAnimationFrame(() => {
+            map?.invalidateSize();
+            performFit();
+          });
+        };
+
+        /* ---------------------------------------------------- provider chain */
+        const mountProvider = (): void => {
+          if (!map || disposed) return;
+          providerCleanup?.();
+          providerCleanup = null;
+
+          const provider = TILE_PROVIDERS[providerIndex];
+          if (!provider) {
+            failBasemap(
+              'Basemap tiles could not be loaded from any provider. Coordinate entry, tables and uploaded data still work.',
+            );
+            return;
+          }
+
+          publish({
+            id: provider.id,
+            label: provider.label,
+            status: providerIndex === 0 ? 'loading' : 'fallback',
+          });
+
+          const layer = L.tileLayer(provider.url, {
+            maxZoom: provider.maxZoom,
+            attribution: provider.attribution,
+            subdomains: provider.subdomains ?? 'abc',
+            crossOrigin: true,
+            errorTileUrl: TRANSPARENT_TILE,
+            keepBuffer: 2,
+          });
+          layer.addTo(map);
+
+          let loadedTiles = 0;
+          let errorsSinceLoad = 0;
+          let switched = false;
+          let timeout = 0;
+          let announced = false;
+
+          const clearTimer = () => {
+            if (timeout) window.clearTimeout(timeout);
+            timeout = 0;
+          };
+
+          const switchTo = (nextIndex: number) => {
+            if (switched || disposed) return;
+            switched = true;
+            clearTimer();
+            layer.off();
+            layer.remove();
+            providerIndex = nextIndex;
+            const next = TILE_PROVIDERS[providerIndex];
+            if (next) {
+              publish({ id: next.id, label: next.label, status: 'fallback' });
+              mountProvider();
+            } else {
+              failBasemap(
+                'Basemap tiles could not be loaded from any provider. Coordinate entry, tables and uploaded data still work.',
+              );
+            }
+          };
+
+          const advance = () => {
+            if (providerIndex >= TILE_PROVIDERS.length - 1) {
+              failBasemap(
+                'Basemap tiles could not be loaded from any provider. Coordinate entry, tables and uploaded data still work.',
+              );
+              return;
+            }
+            switchTo(nextProviderIndex(providerIndex));
+          };
+
+          timeout = window.setTimeout(() => {
+            if (!switched && loadedTiles === 0) advance();
+          }, PROVIDER_TIMEOUT_MS);
+
+          layer.on('tileload', () => {
+            loadedTiles += 1;
+            errorsSinceLoad = 0;
+            if (switched) return;
+            clearTimer();
+            if (!announced) {
+              announced = true;
+              publish({
+                id: provider.id,
+                label: provider.label,
+                status: providerIndex === 0 ? 'ok' : 'fallback',
+              });
+            }
+            // Replay a fit request once the basemap proves alive so the ring is
+            // framed correctly even if the first fit ran against an empty size.
+            if (!refitAfterTiles) {
+              refitAfterTiles = true;
+              if (pendingFit) requestFit();
+            }
+          });
+
+          layer.on('tileerror', () => {
+            if (switched) return;
+            errorsSinceLoad += 1;
+            const action = evaluateTileHealth({ loadedTiles, errorsSinceLoad }, providerIndex);
+            if (action === 'switch') advance();
+            else if (action === 'fail') {
+              failBasemap(
+                'Basemap tiles could not be loaded from any provider. Coordinate entry, tables and uploaded data still work.',
+              );
+            }
+          });
+
+          providerCleanup = () => {
+            switched = true;
+            clearTimer();
+            layer.off();
+            layer.remove();
+          };
+        };
+
+        mountProvider();
+
+        // Keep the map sized when it starts hidden in a tab panel or reflows.
         let resizeFrame = 0;
         let resizeObserver: ResizeObserver | null = null;
+        const invalidate = () => {
+          cancelAnimationFrame(resizeFrame);
+          resizeFrame = requestAnimationFrame(() => map?.invalidateSize());
+        };
         if (typeof ResizeObserver !== 'undefined') {
-          resizeObserver = new ResizeObserver(() => {
-            cancelAnimationFrame(resizeFrame);
-            resizeFrame = requestAnimationFrame(() => map?.invalidateSize());
-          });
+          resizeObserver = new ResizeObserver(invalidate);
           resizeObserver.observe(container);
         }
         resizeCleanup = () => {
@@ -188,17 +359,10 @@ export function MapCanvas({
 
         map.whenReady(() => {
           if (disposed || !map) return;
+          map.invalidateSize();
           setMapReady(true);
           latest.current.onReady?.({
-            fit: (points, padding = 32) => {
-              if (!map || points.length === 0) return;
-              if (points.length === 1) {
-                map.setView([points[0].lat, points[0].lon], Math.max(map.getZoom(), 13), { animate: false });
-                return;
-              }
-              const bounds = L.latLngBounds(points.map((point) => [point.lat, point.lon] as [number, number]));
-              map.fitBounds(bounds, { padding: [padding, padding], maxZoom: 17, animate: false });
-            },
+            fit: (points, padding = 32) => requestFit(points, padding),
             setView: (nextCenter, nextZoom) => {
               map?.setView([nextCenter.lat, nextCenter.lon], nextZoom ?? map.getZoom(), { animate: false });
             },
@@ -210,17 +374,19 @@ export function MapCanvas({
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
       } catch {
         if (!disposed) {
-          const message = 'The map library could not be loaded.';
-          setFailure(message);
-          latest.current.onMapError?.(message);
+          failBasemap(
+            'The map library could not be loaded. Coordinate entry, tables and uploaded data still work.',
+          );
         }
       }
     })();
 
     return () => {
       disposed = true;
+      initialisingRef.current = false;
       themeObserver?.disconnect();
       resizeCleanup?.();
+      providerCleanup?.();
       lineLayerRef.current?.remove();
       polygonLayerRef.current?.remove();
       markerLayerRef.current = null;
@@ -399,9 +565,34 @@ export function MapCanvas({
     }
   }, [mapReady, center, zoom]);
 
+  const basemapText =
+    basemap.status === 'loading'
+      ? `Basemap: ${basemap.label} — loading tiles…`
+      : basemap.status === 'ok'
+        ? `Basemap: ${basemap.label}`
+        : basemap.status === 'fallback'
+          ? `Fallback basemap: ${basemap.label}`
+          : `Basemap failed: ${basemap.label} — coordinate entry still works`;
+
   return (
-    <div className={cx('map-shell', className)} data-mode={mode} data-map-ready={mapReady || undefined}>
-      <div ref={containerRef} className="map-canvas" aria-label={ariaLabel} />
+    <div
+      className={cx('map-shell', className)}
+      data-mode={mode}
+      data-basemap-status={basemap.status}
+      data-basemap-provider={basemap.id}
+      data-map-ready={mapReady ? 'true' : undefined}
+    >
+      <div ref={containerRef} className="map-canvas" role="region" aria-label={ariaLabel} />
+      <div className="map-overlay map-overlay--tr">
+        <p
+          className={`basemap-status basemap-status--${basemap.status}`}
+          role="status"
+          aria-live="polite"
+          title={`Tile source: ${basemap.label} (${basemap.id})`}
+        >
+          {basemapText}
+        </p>
+      </div>
       {!mapReady && !failure ? (
         <div className="map-overlay map-overlay--tl">
           <div className="map-hud" aria-live="polite">
@@ -413,10 +604,7 @@ export function MapCanvas({
         <div className="map-fallback">
           <div className="map-fallback__panel" role="status">
             <strong>Map unavailable</strong>
-            <p>
-              {failure} Map interaction is off, but coordinate entry, polygon tables and uploaded
-              data still work.
-            </p>
+            <p>{failure}</p>
           </div>
         </div>
       ) : null}

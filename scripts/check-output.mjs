@@ -41,10 +41,11 @@ Usage: node scripts/check-output.mjs [options]
 Options:
   --dist <dir>   dist directory to audit (default: <repo>/dist)
   --base <url>   canonical site origin (default: https://geodesia.online)
+  --offline      skip the network reachability probe (warning-only check)
   --help         show this help`;
 
 function parseArgs(argv) {
-  const options = { dist: null, base: 'https://geodesia.online' };
+  const options = { dist: null, base: 'https://geodesia.online', offline: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') {
@@ -58,12 +59,15 @@ function parseArgs(argv) {
       options.base = argv[++index];
     } else if (arg.startsWith('--base=')) {
       options.base = arg.slice('--base='.length);
+    } else if (arg === '--offline' || arg === '--skip-network') {
+      options.offline = true;
     } else {
       console.error(`Unknown argument: ${arg}\n\n${USAGE}`);
       process.exit(2);
     }
   }
   if (!options.dist) options.dist = join(PROJECT_ROOT, 'dist');
+  if (process.env.GEODESIA_QA_OFFLINE === '1') options.offline = true;
   options.base = options.base.replace(/\/+$/, '');
   return options;
 }
@@ -79,6 +83,11 @@ const SITE_HOST = safeHost(SITE);
 
 const results = [];
 const allFailures = [];
+const warnings = [];
+
+function addWarning(check, message) {
+  warnings.push({ check, message });
+}
 
 function addResult(name, detail, failures = []) {
   results.push({ name, detail, failures });
@@ -173,6 +182,16 @@ function cleanText(value) {
   return decodeEntities(String(value ?? ''))
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** Visible text of an HTML document (scripts, styles and tags stripped). */
+function plainHtmlText(html) {
+  return cleanText(
+    String(html)
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' '),
+  );
 }
 
 function parseAttributes(tag) {
@@ -1196,6 +1215,329 @@ runCheck('assets:social-card', () => {
 });
 
 /* ------------------------------------------------------------------------- */
+/* check: service worker + basemap CSP + polygon SSR (cycle 2 surfaces)       */
+/* ------------------------------------------------------------------------- */
+
+/** Project-root files drive the deployment-level checks below.
+ *  Normally they live beside the default `dist/`; a fixture dist may carry its
+ *  own `vercel.json` + `src/ui/tools/basemap.ts` next to it so those checks can
+ *  be exercised without touching the real deployment config. */
+const DEPLOYMENT_ROOT = dirname(DIST);
+
+function deploymentFile(relPath) {
+  const local = join(DEPLOYMENT_ROOT, relPath);
+  if (existsSync(local)) return local;
+  return join(PROJECT_ROOT, relPath);
+}
+
+const PROJECT_FILES = {
+  vercel: deploymentFile('vercel.json'),
+  basemap: deploymentFile(join('src', 'ui', 'tools', 'basemap.ts')),
+};
+
+function readProjectConfig(file) {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function readVercelHeaders() {
+  const text = readProjectConfig(PROJECT_FILES.vercel);
+  if (!text) return null;
+  try {
+    const config = JSON.parse(text);
+    return Array.isArray(config.headers) ? config.headers : [];
+  } catch {
+    return null;
+  }
+}
+
+function readCspDirectives() {
+  const headers = readVercelHeaders();
+  if (!headers) return null;
+  for (const entry of headers) {
+    for (const header of entry.headers ?? []) {
+      if (String(header.key ?? '').toLowerCase() === 'content-security-policy') {
+        const directives = new Map();
+        for (const chunk of String(header.value ?? '').split(';')) {
+          const parts = chunk.trim().split(/\s+/).filter(Boolean);
+          if (parts.length > 0) directives.set(parts[0], parts.slice(1));
+        }
+        return directives;
+      }
+    }
+  }
+  return null;
+}
+
+/** Host allow-list semantics: `https://host`, `https://*.sub` or `https://a.sub`. */
+function cspAllowsHost(host, tokens) {
+  return (tokens ?? []).some((token) => {
+    if (token === `https://${host}`) return true;
+    if (token === `https://*.${host}`) return true;
+    const wildcard = /^https:\/\/\*\.(.+)$/.exec(token);
+    return Boolean(wildcard && host.endsWith(`.${wildcard[1]}`));
+  });
+}
+
+/** Extract the tile provider URLs and elevation endpoints from basemap.ts. */
+function basemapSources() {
+  const text = readProjectConfig(PROJECT_FILES.basemap);
+  if (!text) return null;
+  const tileUrls = [];
+  const tilePattern = /url:\s*'(https:\/\/[^']+)'/g;
+  let match;
+  while ((match = tilePattern.exec(text)) !== null) tileUrls.push(match[1]);
+  const elevationEndpoints = [];
+  const elevationPattern = /'(https:\/\/[^']+\/elevation)'/g;
+  while ((match = elevationPattern.exec(text)) !== null) elevationEndpoints.push(match[1]);
+  const hostsOf = (urls) => urls.map((url) => new URL(url).hostname);
+  return {
+    tileUrls,
+    tileHosts: [...new Set(hostsOf(tileUrls))],
+    elevationEndpoints,
+    elevationHosts: [...new Set(hostsOf(elevationEndpoints))],
+  };
+}
+
+runCheck('sw:file', () => {
+  const swFile = join(DIST, 'sw.js');
+  const failures = [];
+  if (!existsSync(swFile)) {
+    failures.push({
+      file: 'sw.js',
+      message: 'dist/sw.js does not exist (service worker was not copied from public/).',
+      fix: 'Add public/sw.js; Astro copies public/ verbatim into dist/.',
+    });
+    return { detail: 'missing', failures };
+  }
+  const bytes = bytesOf(swFile);
+  const text = readText(swFile);
+  const hasTileCache = text.includes('geodesia-tiles-');
+  const hasFetch = /addEventListener\(\s*['"]fetch['"]/.test(text);
+  if (bytes < 2048) {
+    failures.push({
+      file: 'sw.js',
+      message: `dist/sw.js is only ${bytes} B (expected ≥ 2048 B).`,
+      fix: 'Ship the full two-cache service worker, not a stub.',
+    });
+  }
+  if (!hasTileCache) {
+    failures.push({
+      file: 'sw.js',
+      message: "sw.js does not define a `geodesia-tiles-` cache.",
+      fix: 'Name the tile cache with the `geodesia-tiles-` prefix.',
+    });
+  }
+  if (!hasFetch) {
+    failures.push({
+      file: 'sw.js',
+      message: 'sw.js has no fetch event handler.',
+      fix: "Register event handling with self.addEventListener('fetch', ...).",
+    });
+  }
+  const registration = (() => {
+    for (const page of pages) {
+      if (/serviceWorker\.register\(\s*['"]\/sw\.js['"]/.test(page.html)) return page.relPath;
+    }
+    for (const relPath of relFiles.filter((item) => item.endsWith('.js'))) {
+      if (readText(join(DIST, relPath)).includes("serviceWorker.register('/sw.js')")) return relPath;
+    }
+    return null;
+  })();
+  return {
+    detail: `${formatBytes(bytes)}; tile cache ${hasTileCache ? '✓' : '✗'}; fetch handler ${hasFetch ? '✓' : '✗'}; registration: ${registration ?? 'not referenced'}`,
+    failures,
+  };
+});
+
+runCheck('sw:headers', () => {
+  const headers = readVercelHeaders();
+  if (!headers) {
+    return {
+      detail: 'vercel.json unreadable',
+      failures: [
+        {
+          file: 'vercel.json',
+          message: 'Could not read headers from vercel.json.',
+          fix: 'Keep vercel.json valid JSON with a headers array.',
+        },
+      ],
+    };
+  }
+  const candidates = headers.filter(
+    (entry) =>
+      /\/sw\.js/.test(String(entry.source ?? '')) ||
+      (entry.headers ?? []).some((header) => String(header.key).toLowerCase() === 'service-worker-allowed'),
+  );
+  if (candidates.length === 0) {
+    return {
+      detail: 'no /sw.js header rule',
+      failures: [
+        {
+          file: 'vercel.json',
+          message: 'No header rule for /sw.js.',
+          fix: 'Add a /sw.js source with Cache-Control max-age=0, must-revalidate and Service-Worker-Allowed: /.',
+        },
+      ],
+    };
+  }
+  const headersByName = new Map();
+  for (const entry of candidates) {
+    for (const header of entry.headers ?? []) {
+      headersByName.set(String(header.key).toLowerCase(), String(header.value ?? ''));
+    }
+  }
+  const failures = [];
+  const cacheControl = headersByName.get('cache-control') ?? '';
+  if (!/no-store/i.test(cacheControl) && !(/max-age\s*=\s*0/i.test(cacheControl) && /must-revalidate|no-store/i.test(cacheControl))) {
+    failures.push({
+      file: 'vercel.json',
+      message: `Service worker Cache-Control is "${cacheControl || '(missing)'}"; expected no-store / max-age=0, must-revalidate so a new worker is picked up.`,
+      fix: 'Set Cache-Control: public, max-age=0, must-revalidate on /sw.js.',
+    });
+  }
+  const allowed = headersByName.get('service-worker-allowed') ?? '';
+  if (allowed !== '/') {
+    failures.push({
+      file: 'vercel.json',
+      message: `Service-Worker-Allowed is "${allowed || '(missing)'}"; expected "/".`,
+      fix: 'Add Service-Worker-Allowed: / to the /sw.js header rule.',
+    });
+  }
+  return {
+    detail: `Cache-Control: ${cacheControl || '(missing)'}; Service-Worker-Allowed: ${allowed || '(missing)'}`,
+    failures,
+  };
+});
+
+runCheck('csp:basemap-hosts', () => {
+  const directives = readCspDirectives();
+  const sources = basemapSources();
+  if (!directives) {
+    return {
+      detail: 'CSP unreadable',
+      failures: [{ file: 'vercel.json', message: 'No Content-Security-Policy header found.', fix: 'Restore the CSP header.' }],
+    };
+  }
+  if (!sources) {
+    return {
+      detail: 'basemap.ts unreadable',
+      failures: [{ file: 'src/ui/tools/basemap.ts', message: 'Could not read basemap sources.', fix: 'Restore the basemap module.' }],
+    };
+  }
+  const imgSrc = directives.get('img-src') ?? [];
+  const connectSrc = directives.get('connect-src') ?? [];
+  const workerSrc = directives.get('worker-src') ?? [];
+  const failures = [];
+  for (const host of sources.tileHosts) {
+    if (!cspAllowsHost(host, imgSrc)) {
+      failures.push({
+        file: 'vercel.json',
+        message: `CSP img-src does not allow basemap host ${host}.`,
+        fix: `Add https://${host} (or an https://*.${host} subdomain form) to img-src.`,
+      });
+    }
+  }
+  for (const host of sources.elevationHosts) {
+    if (!cspAllowsHost(host, connectSrc)) {
+      failures.push({
+        file: 'vercel.json',
+        message: `CSP connect-src does not allow elevation host ${host}.`,
+        fix: `Add https://${host} to connect-src.`,
+      });
+    }
+  }
+  if (!imgSrc.includes('data:')) {
+    failures.push({
+      file: 'vercel.json',
+      message: 'CSP img-src does not allow data: URLs (errorTileUrl transparent tile is a data: PNG).',
+      fix: "Add data: to img-src.",
+    });
+  }
+  if (!workerSrc.includes("'self'")) {
+    failures.push({
+      file: 'vercel.json',
+      message: "CSP worker-src does not allow 'self'.",
+      fix: "Add 'self' to worker-src.",
+    });
+  }
+  return {
+    detail: `img-src hosts for ${sources.tileHosts.join(', ')}; connect-src for ${sources.elevationHosts.join(', ')}; worker-src 'self'`,
+    failures,
+  };
+});
+
+runCheck('polygon:reference-systems', () => {
+  const page = pages.find((item) => item.route === '/polygon-area');
+  if (!page) {
+    return {
+      detail: 'no /polygon-area page',
+      failures: [{ file: 'polygon-area/index.html', message: 'Polygon page missing from dist.', fix: 'Build the polygon-area route.' }],
+    };
+  }
+  const text = plainHtmlText(page.html).toLowerCase();
+  const required = [
+    ['local x/y', 'Local X/Y mode label'],
+    ['utm', 'UTM mode label'],
+    ['geographic', 'Geographic mode label'],
+    ['zone', '"zone" wording (UTM zone control)'],
+    ['hemisphere', '"hemisphere" wording (UTM hemisphere control)'],
+  ];
+  const failures = required
+    .filter(([needle]) => !text.includes(needle))
+    .map(([needle, label]) => ({
+      file: page.relPath,
+      message: `SSR payload is missing ${label} (${needle}).`,
+      fix: 'Pre-render the polygon control copy and mode labels in src/seo/content/polygon.ts / PolygonTool.',
+    }));
+  const surfaces = ['grid', 'geodesic', 'ground'].filter((surface) => text.includes(surface));
+  return {
+    detail: `labels+UTM/zone/hemisphere ${failures.length === 0 ? 'all present' : 'incomplete'}; surfaces mentioned: ${surfaces.join(' · ') || '(none)'}`,
+    failures,
+  };
+});
+
+runCheck('content:footer-no-tracking', () => {
+  const failures = [];
+  for (const page of pages) {
+    if (/no tracking scripts/i.test(page.html)) {
+      failures.push({
+        file: page.relPath,
+        message: 'Page still contains the removed "No tracking scripts" claim.',
+        fix: 'Remove the retired claim from BaseLayout/SiteFooter and page copy; replace with accurate privacy wording if needed.',
+      });
+    }
+  }
+  return { detail: `${pages.length} page(s) scanned for retired tracking claim`, failures };
+});
+
+runCheck('content:basemap-claims', () => {
+  const failures = [];
+  const claims = [
+    /openstreetmap[^.<]{0,180}\b(?:only|sole)\b/i,
+    /\b(?:only|sole)\b[^.<]{0,180}\bopenstreetmap\b/i,
+    /openstreetmap[^.<]{0,100}\b(?:single|one)\s+(?:basemap|map source|tile source)\b/i,
+  ];
+  for (const page of pages) {
+    const text = plainHtmlText(page.html);
+    for (const claim of claims) {
+      const match = claim.exec(text);
+      if (!match) continue;
+      failures.push({
+        file: page.relPath,
+        message: `Page appears to claim OpenStreetMap is the only basemap source: "${String(match[0]).replace(/\s+/g, ' ').slice(0, 140)}".`,
+        fix: 'Update copy to describe the provider chain (Geodesia edge → Esri → CARTO → OSM fallback).',
+      });
+      break;
+    }
+  }
+  return { detail: `${pages.length} page(s) scanned for single-basemap claims`, failures };
+});
+
+/* ------------------------------------------------------------------------- */
 /* check: bundle budget + lazy heavy libs                                     */
 /* ------------------------------------------------------------------------- */
 
@@ -1388,16 +1730,21 @@ function looksLikePdfLib(text) {
  *  its implementation string literals; xlsx/leaflet by their Vite chunk names
  *  (their app-side import wrappers legitimately mention the names). */
 function detectHeavyChunks() {
-  const pxb = new RegExp('^xlsx\\.');
-  const leaf = new RegExp('^leaflet');
+  const xlsxName = /^xlsx\./;
+  const leafletName = /^leaflet/;
+  const proj4Name = /^proj4/i;
   const chunks = [];
   for (const relPath of relFiles.filter((item) => item.endsWith('.js'))) {
     const base = posix.basename(relPath);
     const text = readText(join(DIST, relPath));
     let library = null;
     if (looksLikePdfLib(text)) library = 'pdf-lib';
-    else if (pxb.test(base)) library = 'xlsx';
-    else if (leaf.test(base)) library = 'leaflet';
+    else if (xlsxName.test(base)) library = 'xlsx';
+    else if (leafletName.test(base)) library = 'leaflet';
+    /* proj4 is an ESM/UMD bundle: detect it by its chunk name or by the
+     * projection-definition strings that only the library implementation has
+     * (the app-side `utmDefinition()` wrapper contains at most one `+proj=`). */
+    else if (proj4Name.test(base) || (text.match(/\+proj=/g) ?? []).length > 5) library = 'proj4';
     if (!library) continue;
     chunks.push({
       relPath,
@@ -1412,14 +1759,15 @@ function detectHeavyChunks() {
 runCheck('bundle:lazy-heavy-libs', () => {
   const heavy = detectHeavyChunks();
   const failures = [];
+  const toolRoutes = ['/', '/terrain-profile', '/polygon-area', '/land-unit-converter'];
   for (const page of pages) {
     const { assets } = pageFirstLoadAssets(page);
     for (const chunk of heavy) {
       if (!assets.includes(chunk.relPath)) continue;
       failures.push({
         file: page.relPath,
-        message: `${chunk.library} (${chunk.relPath}, ${formatBytes(chunk.gzipBytes)} gzip) is fetched on first load.`,
-        fix: 'Dynamic-import the library inside the tool component (pdf.ts/xlsx/leaflet importers).',
+        message: `${chunk.library} (${chunk.relPath}, ${formatBytes(chunk.gzipBytes)} gzip) is fetched on first load${toolRoutes.includes(page.route) ? ` of ${page.route}` : ''}.`,
+        fix: 'Dynamic-import the library inside the tool component (pdf.ts importer, xlsx importer, leaflet map mount, proj4 UTM engine in utm.ts).',
       });
     }
   }
@@ -1429,12 +1777,110 @@ runCheck('bundle:lazy-heavy-libs', () => {
           .map((chunk) => `${chunk.library}: ${chunk.relPath} ${formatBytes(chunk.gzipBytes)} gzip`)
           .join('; ')
       : 'no heavy-library chunks emitted';
-  return { detail: `pdf-lib/xlsx/leaflet only in dynamic chunks — ${detail}`, failures };
+  return {
+    detail: `pdf-lib/xlsx/leaflet/proj4 only in dynamic chunks — ${detail}`,
+    failures,
+  };
 });
+
+/* ------------------------------------------------------------------------- */
+/* check: network reachability probe (warning-only, never fails)              */
+/* ------------------------------------------------------------------------- */
+
+async function probeEndpoint(url) {
+  const tryFetch = async (method) => {
+    const response = await fetch(url, {
+      method,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(6000),
+      headers: { 'user-agent': 'Geodesia-QA/1.0 (static output audit)' },
+    });
+    return response.status;
+  };
+  try {
+    const status = await tryFetch('HEAD');
+    return { url, reachable: true, status };
+  } catch {
+    try {
+      const status = await tryFetch('GET');
+      return { url, reachable: true, status };
+    } catch (error) {
+      return { url, reachable: false, status: error?.name ?? 'error' };
+    }
+  }
+}
+
+function probeTargets() {
+  const sources = basemapSources();
+  if (!sources) return null;
+  const fillTile = (template) =>
+    template
+      .replace('{z}', '6')
+      .replace('{x}', '38')
+      .replace('{y}', '37')
+      .replace('{r}', '')
+      .replace('{s}', 'a');
+  const targets = [
+    ...sources.tileUrls.map((url) => ({ kind: 'tile', url: fillTile(url) })),
+    ...sources.elevationEndpoints
+      .filter((url) => url.includes('/elevation'))
+      .map((url) => ({ kind: 'elevation', url: `${url}?latitude=-1.2921&longitude=36.8219` })),
+  ];
+  return targets;
+}
+
+const probeCheck = {
+  name: 'probe:endpoints',
+  run: async () => {
+    const targets = probeTargets();
+    if (!targets || targets.length === 0) {
+      return { detail: 'no endpoints found in basemap.ts', failures: [] };
+    }
+    if (OPTIONS.offline) {
+      return { detail: `skipped (--offline): ${targets.length} endpoint(s) not probed`, failures: [] };
+    }
+    const results = await Promise.all(targets.map(async (target) => ({ target, result: await probeEndpoint(target.url) })));
+    const reachable = results.filter((item) => item.result.reachable);
+    const unreachable = results.filter((item) => !item.result.reachable);
+    for (const item of unreachable) {
+      addWarning('probe:endpoints', `${item.target.kind} endpoint unreachable: ${item.target.url} (${item.result.status})`);
+    }
+    for (const item of reachable) {
+      if (typeof item.result.status === 'number' && item.result.status >= 500) {
+        addWarning('probe:endpoints', `${item.target.kind} endpoint returned HTTP ${item.result.status}: ${item.target.url}`);
+      }
+    }
+    const statusDetail = results
+      .map((item) => `${item.target.kind} ${item.result.reachable ? `HTTP ${item.result.status}` : 'offline'}`)
+      .join('; ');
+    return {
+      detail: `${reachable.length}/${results.length} endpoint(s) responded (warning-only) — ${statusDetail}`,
+      failures: [],
+    };
+  },
+};
 
 /* ------------------------------------------------------------------------- */
 /* report                                                                     */
 /* ------------------------------------------------------------------------- */
+
+async function runCheckAsync(name, check) {
+  try {
+    const { detail, failures = [] } = await check();
+    addResult(name, detail, failures);
+  } catch (error) {
+    addResult(name, `check threw: ${error.message}`, [
+      {
+        file: '-',
+        message: `Internal check error: ${error.message}`,
+        fix: 'Fix the audit script before trusting the result.',
+      },
+    ]);
+  }
+}
+
+/* warning-only network probe: never fails the audit, even with no network */
+await runCheckAsync(probeCheck.name, probeCheck.run);
 
 const nameWidth = Math.max(24, ...results.map((result) => result.name.length));
 const totalChecks = results.length;
@@ -1462,6 +1908,13 @@ if (allFailures.length > 0) {
     console.log(`    ${failure.message}`);
     if (failure.fix) console.log(`    fix: ${failure.fix}`);
   }
+}
+
+if (warnings.length > 0) {
+  console.log('');
+  console.log(`WARNINGS (${warnings.length}) — warning-only, does not fail the audit`);
+  console.log(`${'-'.repeat(60)}`);
+  for (const warning of warnings) console.log(`  [${warning.check}] ${warning.message}`);
 }
 
 console.log('');

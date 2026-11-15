@@ -13,9 +13,6 @@ export type {
   LengthUnit,
   AreaUnits,
   Ellipsoid,
-  AreaMode,
-  AreaSegment,
-  AreaResult,
   UnitGroup,
   AreaUnitDef,
   ConversionRow,
@@ -44,9 +41,50 @@ export {
 
 export { signedArea, shoelaceArea, perimeter2D, centroid2D } from './shoelace';
 
-export { computePolygonArea, toAreaUnits } from './area';
+/* Polygon engine v2 — grid · geodesic · ground (see ./polygon-types). */
+export type {
+  PolygonMode,
+  Hemisphere,
+  UtmPoint,
+  UtmParams,
+  PolygonVertex,
+  PolygonLeg,
+  SurfaceMetrics,
+  PolygonOptions,
+  PolyCentroid,
+  PolygonResult,
+  PolygonValidation,
+  PolygonInput,
+} from './polygon-types';
 
-export { AREA_UNITS, findAreaUnit, convertArea, convertAll, areaFromDimensions } from './units';
+export {
+  computePolygon,
+  validatePolygonInput,
+  estimateCombinedScaleFactor,
+  ringSelfIntersects,
+} from './polygon';
+
+export {
+  UTM_CONSTANTS,
+  loadUtmEngine,
+  isUtmEngineLoaded,
+  utmDefinition,
+  utmZoneFromLonLat,
+  lonLatToUtm,
+  utmToLonLat,
+  formatUtm,
+} from './utm';
+
+/* Legacy v1 area API has been removed: `PolygonTool` now uses `computePolygon`. */
+
+export {
+  AREA_UNITS,
+  findAreaUnit,
+  convertArea,
+  convertAll,
+  areaFromDimensions,
+  toAreaUnits,
+} from './units';
 
 export { TERRAIN_THRESHOLDS, classifySlope, computeTerrainProfile } from './terrain';
 

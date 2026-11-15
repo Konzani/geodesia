@@ -28,6 +28,9 @@ export type { SegmentedProps, SegmentedOption } from './Segmented';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 
+export { PanelSkeleton } from './PanelSkeleton';
+export type { PanelSkeletonProps } from './PanelSkeleton';
+
 export { Toolbar } from './Toolbar';
 export type { ToolbarProps } from './Toolbar';
 

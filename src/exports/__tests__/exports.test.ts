@@ -508,3 +508,222 @@ describe('buildPDF / exportPDF', () => {
     await expect(exportPDF(buildReportSpec())).resolves.toBeUndefined();
   });
 });
+
+/* ------------------------------------------------------------------------- */
+/* polygon v2 — three surfaces (grid / geodesic / ground) + leg table         */
+/* ------------------------------------------------------------------------- */
+
+const LEG_ROWS = Array.from({ length: 40 }, (_, index) => [
+  `L-${String(index + 1).padStart(4, '0')}`,
+  String(index + 1),
+  String(((index + 1) % 40) + 1),
+  (82.41 + index * 0.37).toFixed(3),
+  (82.36 + index * 0.37).toFixed(3),
+  (82.34 + index * 0.37).toFixed(3),
+  (12.5 + index * 9.1).toFixed(2),
+]);
+
+function buildPolygonReportSpec(): PdfReportSpec {
+  return {
+    meta: {
+      tool: 'Polygon Area',
+      title: 'Polygon Area & Coordinate Report',
+      subtitle: 'Reference system: UTM · Zone 37S · surface comparison',
+      generatedAt: new Date('2026-11-15T00:04:40Z'),
+      parameters: [
+        { label: 'Reference system', value: 'UTM (WGS 84)' },
+        { label: 'Zone / hemisphere', value: '37 / S' },
+        { label: 'Mean elevation', value: '1 650.0 m' },
+        { label: 'Combined scale factor', value: '1.00006760' },
+        { label: 'Vertices', value: '40' },
+      ],
+      notes: [
+        'Grid area is planar on the UTM projection; geodesic area is on the WGS 84 ellipsoid.',
+        'Ground area divides the grid area by CSF² using the mean elevation shown above.',
+      ],
+    },
+    sections: [
+      {
+        kind: 'kv',
+        heading: 'Grid surface',
+        rows: [
+          { label: 'Area', value: '249,360.01 m²', emphasis: true },
+          { label: 'Area (hectares)', value: '24.9360 ha' },
+          { label: 'Perimeter', value: '1,997.449 m' },
+        ],
+      },
+      {
+        kind: 'kv',
+        heading: 'Geodesic surface',
+        rows: [
+          { label: 'Area', value: '249,197.01 m²', emphasis: true },
+          { label: 'Perimeter', value: '1,996.796 m' },
+          { label: 'Method', value: 'Karney ellipsoidal area' },
+        ],
+      },
+      {
+        kind: 'kv',
+        heading: 'Ground surface (CSF)',
+        rows: [
+          { label: 'Area', value: '249,326.30 m²', emphasis: true },
+          { label: 'Perimeter', value: '1,997.314 m' },
+          { label: 'CSF', value: '1.00006760' },
+          { label: 'Projection k', value: '1.00032631' },
+          { label: 'Elevation factor', value: '0.99974137' },
+        ],
+      },
+      {
+        kind: 'table',
+        heading: 'Boundary legs',
+        columns: [
+          { label: 'Leg', align: 'left' },
+          { label: 'From', align: 'right' },
+          { label: 'To', align: 'right' },
+          { label: 'Grid distance', unit: 'm', align: 'right' },
+          { label: 'Geodesic', unit: 'm', align: 'right' },
+          { label: 'Ground', unit: 'm', align: 'right' },
+          { label: 'Grid bearing', unit: 'deg', align: 'right' },
+        ],
+        rows: LEG_ROWS,
+        footnote: 'Closure leg runs from the last vertex to the first; bearings are clockwise from grid north.',
+      },
+      {
+        kind: 'text',
+        heading: 'Surface comparison',
+        paragraphs: [
+          'The three surfaces answer different questions and legitimately differ: the grid figure carries the UTM projection scale, the geodesic figure is on the WGS 84 ellipsoid, and the ground figure divides the grid figure by CSF² at the mean elevation. Quote the surface that matches how the boundary is defined.',
+        ],
+      },
+      {
+        kind: 'notes',
+        heading: 'Notes',
+        lines: ['One UTM zone must span the whole ring.', 'Self-intersection is flagged, never repaired.'],
+      },
+    ],
+  };
+}
+
+describe('polygon v2 exports — grid / geodesic / ground', () => {
+  it('paginates a three-surface report with a 40-row leg table', async () => {
+    const bytes = await buildPDF(buildPolygonReportSpec());
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBeGreaterThanOrEqual(2);
+    expect(doc.getTitle()).toBe('Polygon Area & Coordinate Report');
+
+    const streams = await pageContentStreams(bytes);
+    for (const stream of streams) expect(stream).not.toMatch(/\/[A-Za-z0-9]+\s+Do\b/);
+
+    const runs = await extractTextRuns(bytes);
+    const lines = mergeLines(runs);
+
+    /* all three surface sections are rendered as tracked headings (tracked
+     * labels are drawn glyph-by-glyph; spaces are gaps, so assert the words) */
+    const lineTexts = lines.map((line) => line.text);
+    for (const word of ['GRID', 'GEODESIC', 'GROUND']) {
+      expect(lineTexts, word).toContain(word);
+    }
+    expect(lineTexts.filter((text) => text === 'SURFACE').length).toBeGreaterThanOrEqual(3);
+    expect(lineTexts).toContain('(CSF)');
+    expect(lineTexts).toContain('COMPARISON');
+    /* ExportMeta.notes are printed at the end (labelled "Report notes" when a
+     * notes section already exists) */
+    expect(lineTexts).toContain('REPORT');
+    expect(lineTexts).toContain('NOTES');
+
+    /* every leg row appears exactly once — no truncated rows */
+    for (let index = 1; index <= 40; index += 1) {
+      const sentinel = `L-${String(index).padStart(4, '0')}`;
+      expect(runsWith(runs, sentinel).length, sentinel).toBe(1);
+    }
+
+    /* footer + page numbers on every page */
+    for (let page = 0; page < doc.getPageCount(); page += 1) {
+      const pageRuns = runs.filter((run) => run.page === page);
+      expect(pageRuns.some((run) => run.text === 'geodesia.online · client-side computation · WGS 84')).toBe(true);
+      expect(pageRuns.some((run) => run.text === `Page ${page + 1} of ${doc.getPageCount()}`)).toBe(true);
+    }
+
+    /* margins + no baseline collisions (same guarantees as the terrain report) */
+    const CONTENT_RIGHT_EDGE = PAGE_WIDTH - MARGIN;
+    expect(runs.filter((run) => run.x + run.width > CONTENT_RIGHT_EDGE + 0.75)).toEqual([]);
+    for (const run of runs) {
+      expect(run.y).toBeGreaterThan(25);
+      expect(run.y).toBeLessThan(PAGE_HEIGHT - 20);
+    }
+    const byPage = new Map<number, TextRun[]>();
+    for (const run of runs) {
+      const list = byPage.get(run.page) ?? [];
+      list.push(run);
+      byPage.set(run.page, list);
+    }
+    for (const pageRuns of byPage.values()) {
+      for (let i = 0; i < pageRuns.length; i += 1) {
+        for (let j = i + 1; j < pageRuns.length; j += 1) {
+          const a = pageRuns[i]!;
+          const b = pageRuns[j]!;
+          if (Math.abs(a.y - b.y) >= 1) continue;
+          const overlap = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+          expect(overlap, `baseline collision "${a.text}" vs "${b.text}"`).toBeLessThan(1.5);
+        }
+      }
+    }
+  });
+
+  it('exports the three surfaces as a verification JSON document', async () => {
+    const envelope = buildVerification(
+      {
+        tool: 'Polygon Area',
+        title: 'Polygon Area & Coordinate Report',
+        method: 'Gaussian shoelace (grid) + Karney ellipsoidal area (geodesic) + CSF² reduction (ground)',
+        parameters: { referenceSystem: 'utm', zone: 37, hemisphere: 'S', meanElevationM: 1650, vertices: 40 },
+        notes: ['CSF = k · EF'],
+        generatedAt: new Date('2026-11-15T00:04:40Z'),
+      },
+      {
+        grid: { area: 249360.006947, perimeter: 1997.448804 },
+        geodesic: { area: 249197.01234, perimeter: 1996.795878 },
+        ground: { area: 249326.296595, perimeter: 1997.313784 },
+        csf: 1.0000676005953588,
+      },
+    );
+    expect(Object.keys(envelope)).toEqual([
+      'schema',
+      'tool',
+      'title',
+      'generatedAt',
+      'engine',
+      'parameters',
+      'results',
+      'notes',
+    ]);
+    const parsed = JSON.parse(await blobText(buildJSONBlob(envelope))) as typeof envelope;
+    expect(parsed.schema).toBe('geodesia.report/v1');
+    expect(parsed.results.grid.area).toBeCloseTo(249360.006947, 6);
+    expect(parsed.results.geodesic.area).toBeCloseTo(249197.01234, 6);
+    expect(parsed.results.ground.area).toBeCloseTo(249326.296595, 6);
+    expect(parsed.parameters.zone).toBe(37);
+  });
+
+  it('exports a self-describing CSV with all 40 legs', async () => {
+    const blob = buildCSVBlob(
+      [
+        { key: 'leg', label: 'Leg' },
+        { key: 'grid', label: 'Grid distance', unit: 'm' },
+        { key: 'geodesic', label: 'Geodesic distance', unit: 'm' },
+        { key: 'ground', label: 'Ground distance', unit: 'm' },
+        { key: 'bearing', label: 'Grid bearing', unit: 'deg' },
+      ],
+      LEG_ROWS.map((row) => ({ leg: row[0], grid: row[3], geodesic: row[4], ground: row[5], bearing: row[6] })),
+      ['geodesia.online — Polygon Area', 'reference system: UTM zone 37S', 'surfaces: grid, geodesic, ground (CSF)'],
+    );
+    const bytes = await blobBytes(blob);
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const text = await blobText(blob);
+    expect(text).toContain('# geodesia.online');
+    expect(text).toContain('# reference system: UTM zone 37S');
+    expect(text).toContain('Grid distance (m),Geodesic distance (m),Ground distance (m)');
+    for (let index = 1; index <= 40; index += 1) {
+      expect(text).toContain(`L-${String(index).padStart(4, '0')}`);
+    }
+  });
+});
