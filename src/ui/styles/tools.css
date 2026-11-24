@@ -891,3 +891,394 @@
   }
 }
 
+/* ==========================================================================
+   MAP-FIRST TOOL STAGE  (simplified 3-step UX)
+   --------------------------------------------------------------------------
+   Every instrument is a stage + results column. The stage is a 2-column grid:
+   controls take minmax(300px, 26%) and the map / coordinate sheet takes the
+   remaining ≥70% at a tall clamp(520px, 72vh, 900px). The map wrapper (not
+   `.map-shell`, which map.css owns) carries the height, so the map simply
+   fills its cell. Below 900px the stage stacks and the map comes first.
+   ========================================================================== */
+
+/* Wider tool page so the stage is not boxed in (used by ToolPage.astro). */
+.container--tool {
+  max-width: 1560px;
+}
+
+/* Trim the tab-panel inset so the stage can use the full frame width.
+   Scoped to the workspace frame so it beats the component-layer default
+   regardless of the order the island CSS is bundled in. */
+.workspace__frame .tab-panel {
+  padding: clamp(0.75rem, 0.45rem + 1vw, 1.25rem);
+}
+
+/* Root of an instrument: stage first, results (and tables) underneath. */
+.tool-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+/* ------------------------------------------------------ stage grid */
+.tool-stage {
+  display: grid;
+  grid-template-columns: minmax(300px, 26%) minmax(0, 1fr);
+  gap: var(--s-5);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.tool-stage__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+/* Map / plot hero cell — this wrapper owns the stage height. */
+.tool-stage__hero {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: clamp(520px, 72vh, 900px);
+}
+
+/* Converter-style stage: same split, natural (content) height. */
+.tool-stage--auto {
+  align-items: start;
+}
+
+.tool-stage--auto .tool-stage__hero {
+  height: auto;
+}
+
+/* A panel that fills its hero cell without fixed-height inner scroll traps. */
+.stage-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stage-panel > .panel__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--s-3);
+  gap: var(--s-3);
+}
+
+.stage-panel--map > .panel__body {
+  padding: 0;
+  gap: 0;
+}
+
+.stage-panel--map > .panel__body > .notice {
+  margin: var(--s-3);
+}
+
+.stage-panel > .panel__head {
+  padding: var(--s-2) var(--s-4);
+}
+
+/* The map shell (map.css: 100% × 100%) fills this flex cell. */
+.stage-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The map shell fills this flex cell. The declaration is intentionally more
+   specific than the component-layer `.map-shell` box so the stage size wins
+   even when the component stylesheet is bundled after this one. */
+.stage-hero > .map-shell {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* White coordinate sheet as the hero (Polygon Local X/Y · UTM). */
+.stage-hero--plot {
+  justify-content: center;
+  padding: var(--s-3);
+  overflow: auto;
+}
+
+.stage-hero--plot .plot-surface {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+/* ------------------------------------------------------ numbered steps */
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+.step-card {
+  min-width: 0;
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.step-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: var(--bw-1) solid var(--line-soft);
+}
+
+.step-card__num {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+
+.step-card__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  color: var(--fg-strong);
+}
+
+.step-card__status {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+.step-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+}
+
+/* ------------------------------------------------- result sentence + chips */
+.result-line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.result-line__text {
+  margin: 0;
+  max-width: 58ch;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-strong);
+  text-wrap: balance;
+}
+
+.unit-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.unit-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: 2px var(--s-3);
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-sunken);
+  font-size: var(--text-xs);
+  color: var(--fg-soft);
+  white-space: nowrap;
+}
+
+.unit-chip strong {
+  color: var(--fg-strong);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.unit-chip--accent {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  color: var(--fg-strong);
+}
+
+/* ------------------------------------------------ collapsed advanced block */
+.advanced {
+  min-width: 0;
+  border: var(--bw-1) solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.advanced > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced > summary::after {
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1;
+  color: var(--fg-faint);
+}
+
+.advanced[open] > summary::after {
+  content: "–";
+}
+
+.advanced[open] > summary {
+  border-bottom: var(--bw-1) solid var(--line-soft);
+  color: var(--fg);
+}
+
+.advanced > summary:focus-visible {
+  outline: var(--bw-2) solid var(--focus);
+  outline-offset: -2px;
+}
+
+.advanced__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+}
+
+.step-card__body .advanced {
+  background: var(--bg-sunken);
+}
+
+/* ---------------------------------------------------------- results column */
+.tool-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.tool-results--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s-5);
+  align-items: start;
+}
+
+/* -------------------------------------------------------------- converter */
+.tool-simple {
+  display: grid;
+  grid-template-columns: minmax(300px, 26%) minmax(0, 1fr);
+  gap: var(--s-5);
+  align-items: start;
+}
+
+/* Larger primary input on the converter (still a token-only field). */
+.input.input--lg {
+  min-height: 48px;
+  padding: var(--s-2) var(--s-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Long conversion tables page-scroll instead of scrolling inside the stage. */
+.tool-page .converter__table-wrap {
+  max-height: none;
+}
+
+/* Secondary map inside a collapsed "Map check" block (Polygon UTM). */
+.map-check {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: clamp(320px, 42vh, 520px);
+}
+
+.map-check > .map-shell {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+}
+
+/* --------------------------------------------------------------- mobile */
+@media (max-width: 1100px) {
+  .tool-results--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .tool-stage,
+  .tool-simple {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
+  }
+
+  /* Map first on phones: the stage hero comes before the controls. */
+  .tool-stage__hero {
+    order: -1;
+    height: 58vh;
+    min-height: 340px;
+    max-height: 560px;
+  }
+
+  .tool-stage--auto .tool-stage__hero {
+    order: 0;
+    height: auto;
+    min-height: 0;
+  }
+
+  .workspace__frame .tab-panel {
+    padding: var(--s-3);
+  }
+
+  .result-line__text {
+    font-size: var(--text-lg);
+  }
+}
+

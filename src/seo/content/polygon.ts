@@ -5,15 +5,20 @@ export const polygonContent: ToolPageContent = {
   eyebrow: 'Instrument 02 · Area',
   h1: 'Area from UTM eastings, local X/Y or latitude and longitude',
   lede:
-    'Paste the boundary in the coordinates you actually have — UTM eastings and northings with a zone and hemisphere, a local X/Y grid, or WGS 84 longitude and latitude in decimal or DMS — and Geodesia returns the grid, geodesic and ground surfaces, with every leg and the closure checked.',
+    'Paste the boundary in the coordinates you actually have — UTM eastings and northings with a zone and hemisphere, a local X/Y grid, or WGS 84 longitude and latitude in decimal or DMS — or draw it on the satellite map; Geodesia returns the grid, geodesic and ground surfaces, with every leg and the closure checked.',
 
   intro: [
+    'The map is the largest part of the tool and opens on satellite imagery. Satellite is the default because plot boundaries, fences, tracks and buildings are visible on it at zoom 17–19; Terrain and Streets sit next to it in the switcher inside the map, and the Labels control adds place and boundary names over the imagery. Map tiles are cached — at the Geodesia edge where a layer is served through it, and again in your browser by a service worker — so a second visit to the same area loads quickly. In geographic mode you click the map in ring order and the longitude and latitude are written into the vertex table; in UTM and local X/Y modes the same imagery is a spatial check you can see your ring against, not a source of coordinates.',
     'The instrument accepts the three coordinate forms a parcel actually arrives in. A local X/Y list in metres is a grid with no geographic reference, so it can only give a planar grid result. UTM eastings and northings are a real projection on WGS 84: enter the zone and hemisphere, and the instrument can recover longitude and latitude from the grid, which is what makes the geodesic and ground surfaces possible. WGS 84 longitude and latitude, in decimal degrees or degrees-minutes-seconds and written longitude first, arrive without a grid at all; Geodesia projects the ring into the UTM zone of its centroid so the grid surface exists, then computes the geodesic surface directly from the geographic coordinates.',
     'Three surfaces are computed because they answer different questions. The grid surface is the Gaussian shoelace area on projected metres: it is what a UTM-based plan, GIS layer or CAD drawing sees, and it carries the distortion of the projection. The geodesic surface is Karney’s ellipsoidal area on WGS 84: it is projection-free, and it is the right figure when the boundary is defined by latitude and longitude. The ground surface divides the grid values by the combined scale factor — area by CSF², distance by CSF — and is the area on the ground at the mean elevation you enter. Local X/Y has only the first surface, because metres with an arbitrary origin cannot be related to the ellipsoid or to ground height.',
     'Which figure to quote depends on how the boundary is defined and what the figure is for. A ground area is usually the one that matches a measurement taken on the ground; a grid area is the one that reconciles with a UTM plan or GIS layer; a boundary supplied as latitude and longitude is naturally quoted as a geodesic area. In geographic mode the UTM zone is derived automatically from the ring’s centroid, and both the zone and whether it was derived are shown in the diagnostics; in UTM mode you supply the zone and hemisphere yourself. Either way one zone has to span essentially the whole parcel: near a zone edge the projection scale is at its largest and the grid area drifts from the ellipsoid by a couple of parts in a thousand, and a ring that straddles two zones cannot be projected correctly in one.',
   ],
 
   features: [
+    {
+      title: 'Satellite imagery by default',
+      text: 'The map opens on high-resolution aerial imagery (Esri World Imagery): field boundaries, plot edges, fences and tracks are legible from roughly zoom 17 and sharp by 19, which is the resolution plot-level work needs. Terrain and Streets are one click away in the switcher inside the map, and Labels can be switched on to overlay place and boundary names on the imagery. Tiles are cached at the edge and in the browser, so returning to the same area is fast.',
+    },
     {
       title: 'Three reference systems',
       text: 'Work in the coordinates the plan, instrument or GIS actually uses: local X/Y in metres, UTM eastings and northings with a zone from 1 to 60 and a hemisphere, or WGS 84 longitude and latitude in decimal degrees or DMS. The mode sets what is available — local X/Y gives the grid surface only, while UTM and geographic input enable the geodesic and ground surfaces.',
@@ -42,24 +47,16 @@ export const polygonContent: ToolPageContent = {
 
   workflow: [
     {
-      title: 'Choose the reference system',
-      text: 'Decide whether the boundary is defined on a local X/Y grid, in UTM eastings and northings, or in WGS 84 longitude and latitude, then pick that mode. Switching reference system keeps the vertex set: the same numbers are read in the new system and any row that cannot be parsed is flagged in the table rather than silently discarded, so check the columns after a switch and clear or correct anything that no longer fits.',
+      title: 'Say how the boundary arrives',
+      text: 'Choose local X/Y, UTM eastings and northings, or WGS 84 longitude and latitude, then pick the map layer that reads best: Satellite for plot boundaries, Terrain for relief, Streets for access. The map is the main working area, and in geographic mode you can click the ring straight onto the satellite imagery.',
     },
     {
-      title: 'Enter the ring in order',
-      text: 'Paste one coordinate pair per line, type them into the table, drop a coordinate sheet (CSV/TXT/TSV/XLSX with a header row), or digitise on the map in geographic mode. Geographic input is longitude then latitude, decimal or DMS; UTM input needs the zone and hemisphere set in the reference panel, and the map is only a check. The ring closes itself from the last vertex back to the first, so do not repeat the first vertex.',
+      title: 'Enter or draw the ring in order',
+      text: 'Paste one coordinate pair per line, type them into the table, drop a coordinate sheet (CSV/TXT/TSV/XLSX with a header row), or digitise by clicking the map in geographic mode. Geographic input is longitude then latitude, decimal or DMS; UTM input needs the zone and hemisphere set in the reference panel, and the map is only a check. The ring closes itself from the last vertex back to the first, so do not repeat the first vertex; switching reference system keeps the vertex set and flags rows that no longer parse.',
     },
     {
-      title: 'Turn on the surfaces you need',
-      text: 'The grid surface is always produced. The geodesic surface is on by default for UTM and geographic input and can be switched off; the ground surface is opt-in and asks for a mean elevation, with an optional surveyed CSF override. Local X/Y has no geographic reference, so only the grid surface is available and the interface says so.',
-    },
-    {
-      title: 'Run the computation and read the diagnostics',
-      text: 'Run the computation once the vertices and options are set. The diagnostics block reports the closure leg, the UTM zone and whether it was derived, the grid and geographic centroids, the projection scale factor k, the elevation factor and the CSF. Warnings — a self-intersection, a suspected column swap — are printed with the result, and map or projection problems are called out where they arise, not hidden.',
-    },
-    {
-      title: 'Read the surfaces, then export',
-      text: 'The surface cards give area and perimeter in square metres with hectares and acres alongside; the leg table carries the per-leg figures. The CSV records the legs and carries the surface figures in its header lines, the JSON is the full verification document with the surfaces you enabled and the parameters, and the PDF is a filed report with the method and timestamp attached.',
+      title: 'Run it, read the diagnostics, then export',
+      text: 'Run the computation: the grid surface is always produced, the geodesic surface is on by default for UTM and geographic input, and the ground surface appears once you switch it on and give a mean elevation. The diagnostics report the closure leg, the zone, the projection scale factor k, the elevation factor and the CSF, and warnings such as a self-intersection are printed with the result. Then export the CSV, the JSON verification document or the PDF field report, each carrying the method and a UTC timestamp.',
     },
   ],
 
@@ -95,6 +92,11 @@ export const polygonContent: ToolPageContent = {
       label: 'UTM parameters',
       value:
         'Zone 1–60 · hemisphere N/S · false easting 500 000 m · false northing 10 000 000 m (south) · k₀ = 0.9996 · Krüger order-6 transverse Mercator series',
+    },
+    {
+      label: 'Basemap',
+      value:
+        'Satellite (Esri World Imagery, default) · Terrain · Streets — compact switcher inside the map, Labels overlay on the imagery, tiles cached at the edge and in the browser',
     },
     {
       label: 'Surfaces',
@@ -145,5 +147,5 @@ export const polygonContent: ToolPageContent = {
   ],
 
   closing:
-    'Every figure here is a surface claim, so the instrument names the surface and shows the correction behind it: the grid figure on the projection, the geodesic figure on the ellipsoid, and the ground figure with its projection scale factor and elevation factor in view. Nothing is computed on a server, so the coordinates you paste stay in the browser tab, and the CSV, JSON or PDF can be filed beside the survey with the method, the zone where one applies and a UTC timestamp attached.',
+    'Every figure here is a surface claim, so the instrument names the surface and shows the correction behind it: the grid figure on the projection, the geodesic figure on the ellipsoid, and the ground figure with its projection scale factor and elevation factor in view. The basemap is a reference layer — the area comes from the coordinates in the table, whether you typed them or clicked them onto the satellite imagery, and the plot shows the ring that was measured. Tiles are cached for speed, not accuracy. Nothing is computed on a server, so the coordinates you paste stay in the browser tab, and the CSV, JSON or PDF can be filed beside the survey with the method, the zone where one applies and a UTC timestamp attached.',
 };

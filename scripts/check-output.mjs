@@ -8,7 +8,10 @@
  *
  * Checks SEO/meta/JSON-LD, sitemap ↔ robots ↔ pages agreement, forbidden
  * legacy strings, third-party CDN leakage, broken internal links, missing
- * referenced assets, and first-load JS budget / lazy-heavy-library leakage.
+ * referenced assets, asset-reference integrity (every referenced
+ * `_assets/<name>` must exist, and no built JS may preload a CSS chunk that
+ * Astro inlined), the CSP / service-worker basemap-host contract, and the
+ * first-load JS budget / lazy-heavy-library leakage.
  * Prints a PASS/FAIL table plus a precise failure list and exits non-zero on
  * any failure.
  *
@@ -1196,6 +1199,101 @@ runCheck('links:assets', () => {
   return { detail: `${checked} local stylesheet/script/image reference(s) resolved`, failures };
 });
 
+/* ------------------------------------------------------------------------- */
+/* check: asset-reference integrity (regression gate)                         */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * THE BUG THIS GATES
+ * `MapCanvas.tsx` used to `await import('leaflet/dist/leaflet.css')`. With
+ * `build.inlineStylesheets: 'always'` Astro inlined that CSS into every HTML
+ * page and never emitted `/_assets/leaflet.<hash>.css`, but Vite still left the
+ * CSS path in the chunk's `__vite__mapDeps` preload table. The browser then
+ * requested a file that does not exist, Vite's preload helper rejected the
+ * module, and the map died with "The map library could not be loaded."
+ *
+ * RULE: every `_assets/<name>` path mentioned anywhere in the built output
+ * (HTML `src=` / `href=` / `component-url=` / `renderer-url=`, inline scripts,
+ * bare JS string literals, CSS `url()`, XML) must resolve to a real dist file.
+ */
+const REFERENCE_SCAN_EXTENSIONS = new Set(['.html', '.js', '.xml', '.css']);
+
+/** Matches `_assets/name` whether or not it is written with a leading slash
+ *  (Vite's `__vite__mapDeps` table stores bare `_assets/x` paths; HTML stores
+ *  `/_assets/x`). The lookbehind keeps it from matching inside a longer word. */
+const ASSET_REFERENCE_PATTERN = /(?<![\w.-])_assets\/[A-Za-z0-9][A-Za-z0-9._~-]*/g;
+
+function assetReferenceRecords() {
+  return allFiles
+    .filter((file) => REFERENCE_SCAN_EXTENSIONS.has(posix.extname(file).toLowerCase()))
+    .map((file) => ({ relPath: relativeFrom(DIST, file), text: readText(file) }));
+}
+
+runCheck('assets:references-resolve', () => {
+  const records = assetReferenceRecords();
+  const byTarget = new Map();
+  let total = 0;
+  for (const record of records) {
+    ASSET_REFERENCE_PATTERN.lastIndex = 0;
+    let match;
+    while ((match = ASSET_REFERENCE_PATTERN.exec(record.text)) !== null) {
+      total += 1;
+      const target = match[0];
+      const line = lineOf(record.text, match.index);
+      const entry = byTarget.get(target) ?? { target, sites: [] };
+      if (!entry.sites.some((site) => site.relPath === record.relPath && site.line === line)) {
+        entry.sites.push({ relPath: record.relPath, line });
+      }
+      byTarget.set(target, entry);
+    }
+  }
+  const missing = [...byTarget.values()].filter((entry) => !fileSet.has(entry.target));
+  const failures = missing.map((entry) => {
+    const sites = entry.sites
+      .slice(0, 4)
+      .map((site) => `${site.relPath}:${site.line}`);
+    if (entry.sites.length > sites.length) sites.push(`+${entry.sites.length - sites.length} more`);
+    const [firstSite] = entry.sites;
+    return {
+      file: firstSite.relPath,
+      line: firstSite.line,
+      message: `Missing asset "${entry.target}": referenced by ${sites.join(', ')} but no such file exists in dist/ (HTTP 404 at runtime; a preload rejection can kill the whole island).`,
+      fix: 'Remove the stale reference or import the asset statically. With `build.inlineStylesheets: always` no _assets/*.css file is ever emitted.',
+    };
+  });
+  return {
+    detail: `${total} reference(s) to ${byTarget.size} distinct _assets/ target(s) across ${records.length} html/js/xml/css file(s); ${byTarget.size - missing.length}/${byTarget.size} resolve`,
+    failures,
+  };
+});
+
+runCheck('assets:no-dynamic-css-preload', () => {
+  const jsRecords = allFiles
+    .filter((file) => file.endsWith('.js'))
+    .map((file) => ({ relPath: relativeFrom(DIST, file), text: readText(file) }));
+  const cssReferencePattern = /(?<![\w.-])_assets\/[A-Za-z0-9][A-Za-z0-9._~-]*\.css\b/g;
+  const failures = [];
+  let references = 0;
+  for (const record of jsRecords) {
+    cssReferencePattern.lastIndex = 0;
+    let match;
+    while ((match = cssReferencePattern.exec(record.text)) !== null) {
+      references += 1;
+      failures.push({
+        file: record.relPath,
+        line: lineOf(record.text, match.index),
+        message: `Built JS references CSS chunk "${match[0]}". Astro inlines stylesheets (inlineStylesheets: 'always') and never emits that file, so the request 404s and the importing module fails.`,
+        fix: 'Import the stylesheet statically from an entry module / .astro page; never dynamic-import a .css file inside a hydrated component.',
+      });
+      if (failures.length > 40) break;
+    }
+  }
+  return {
+    detail: `${jsRecords.length} JS file(s) scanned; ${references} _assets/*.css reference(s) (expected 0 — CSS is inlined into the HTML)`,
+    failures,
+  };
+});
+
 runCheck('assets:social-card', () => {
   const required = [
     ['og/geodesia-og.png', 'Open Graph card'],
@@ -1233,7 +1331,24 @@ function deploymentFile(relPath) {
 const PROJECT_FILES = {
   vercel: deploymentFile('vercel.json'),
   basemap: deploymentFile(join('src', 'ui', 'tools', 'basemap.ts')),
+  sw: deploymentFile(join('public', 'sw.js')),
 };
+
+/**
+ * Basemap hosts the shipped layer stack is REQUIRED to use: the Geodesia edge
+ * worker (primary), Esri World_Imagery + the Reference/labels overlay, CARTO,
+ * OpenStreetMap, and OpenTopoMap. Kept as an explicit contract here — not only
+ * derived from `basemap.ts` — so the deployment gate still protects the tile
+ * contract if the source module is renamed or restructured.
+ */
+const REQUIRED_BASEMAP_HOSTS = [
+  'geodesia-proxy.254konzani.workers.dev',
+  'server.arcgisonline.com',
+  'services.arcgisonline.com',
+  'basemaps.cartocdn.com',
+  'tile.openstreetmap.org',
+  'tile.opentopomap.org',
+];
 
 function readProjectConfig(file) {
   try {
@@ -1293,7 +1408,20 @@ function basemapSources() {
   const elevationEndpoints = [];
   const elevationPattern = /'(https:\/\/[^']+\/elevation)'/g;
   while ((match = elevationPattern.exec(text)) !== null) elevationEndpoints.push(match[1]);
-  const hostsOf = (urls) => urls.map((url) => new URL(url).hostname);
+  /** Hostname of a Leaflet URL template. `{s}`/`{r}` placeholders appear inside
+   *  the host (`https://{s}.tile.opentopomap.org/...`) and `new URL()` keeps
+   *  them verbatim, so a leading `{subdomain}.` is reduced to the parent host
+   *  (the subdomain letters are covered by the CSP wildcard / SW entries). */
+  const hostOf = (url) => {
+    const strip = (host) => host.replace(/^\{[^}]+\}\./, '').toLowerCase();
+    try {
+      return strip(new URL(url).hostname);
+    } catch {
+      const match = /^https?:\/\/([^/]+)/i.exec(url);
+      return match ? strip(match[1].replace(/:.*$/, '')) : '';
+    }
+  };
+  const hostsOf = (urls) => urls.map(hostOf).filter(Boolean);
   return {
     tileUrls,
     tileHosts: [...new Set(hostsOf(tileUrls))],
@@ -1413,6 +1541,55 @@ runCheck('sw:headers', () => {
   };
 });
 
+/** Host entries of the service worker's tile-cache allowlist (`TILE_HOSTS`). */
+function swTileHosts() {
+  const text = readProjectConfig(PROJECT_FILES.sw);
+  if (!text) return null;
+  const block = /const\s+TILE_HOSTS\s*=\s*(?:new\s+Set\s*\(\s*\[([\s\S]*?)\]\s*\)|\[([\s\S]*?)\])/.exec(
+    text,
+  );
+  if (!block) return null;
+  const body = block[1] ?? block[2] ?? '';
+  const hosts = [...body.matchAll(/['"]([a-z0-9][a-z0-9.-]*)['"]/gi)].map((match) =>
+    match[1].toLowerCase(),
+  );
+  return [...new Set(hosts)];
+}
+
+runCheck('sw:tile-allowlist', () => {
+  const allowlist = swTileHosts();
+  if (!allowlist) {
+    return {
+      detail: 'TILE_HOSTS not found',
+      failures: [
+        {
+          file: 'public/sw.js',
+          message: 'Could not find the tile-cache allowlist (`const TILE_HOSTS = new Set([...])`) in public/sw.js.',
+          fix: 'Keep the tile-cache host allowlist in public/sw.js with that exact shape so it is auditable.',
+        },
+      ],
+    };
+  }
+  const dynamic = basemapSources();
+  const required = [...new Set([...REQUIRED_BASEMAP_HOSTS, ...(dynamic?.tileHosts ?? [])])];
+  const failures = [];
+  for (const host of required) {
+    const exact = allowlist.includes(host);
+    const subdomain = allowlist.find((entry) => entry.endsWith(`.${host}`));
+    if (!exact && !subdomain) {
+      failures.push({
+        file: 'public/sw.js',
+        message: `Tile host ${host} is missing from the TILE_HOSTS cache allowlist (has: ${allowlist.join(', ')}).`,
+        fix: `Add '${host}' to TILE_HOSTS in public/sw.js so its tiles are cached offline.`,
+      });
+    }
+  }
+  return {
+    detail: `${allowlist.length} allow-listed host(s); ${required.length} required basemap host(s) covered`,
+    failures,
+  };
+});
+
 runCheck('csp:basemap-hosts', () => {
   const directives = readCspDirectives();
   const sources = basemapSources();
@@ -1432,7 +1609,10 @@ runCheck('csp:basemap-hosts', () => {
   const connectSrc = directives.get('connect-src') ?? [];
   const workerSrc = directives.get('worker-src') ?? [];
   const failures = [];
-  for (const host of sources.tileHosts) {
+  /** Every tile host the map may request must be allowed as an image (the tile
+   *  <img>/CSS url()) — the required contract plus anything basemap.ts adds. */
+  const requiredImgHosts = [...new Set([...REQUIRED_BASEMAP_HOSTS, ...sources.tileHosts])];
+  for (const host of requiredImgHosts) {
     if (!cspAllowsHost(host, imgSrc)) {
       failures.push({
         file: 'vercel.json',
@@ -1441,12 +1621,17 @@ runCheck('csp:basemap-hosts', () => {
       });
     }
   }
-  for (const host of sources.elevationHosts) {
+  /** Tile fetches are cross-origin fetches too: the browser enforces
+   *  connect-src alongside img-src, so the same hosts must be listed there. */
+  const requiredConnectHosts = [
+    ...new Set([...REQUIRED_BASEMAP_HOSTS, ...sources.tileHosts, ...sources.elevationHosts]),
+  ];
+  for (const host of requiredConnectHosts) {
     if (!cspAllowsHost(host, connectSrc)) {
       failures.push({
         file: 'vercel.json',
-        message: `CSP connect-src does not allow elevation host ${host}.`,
-        fix: `Add https://${host} to connect-src.`,
+        message: `CSP connect-src does not allow basemap/elevation host ${host}.`,
+        fix: `Add https://${host} to connect-src (tiles are fetched cross-origin, so img-src alone is not enough).`,
       });
     }
   }
@@ -1465,7 +1650,7 @@ runCheck('csp:basemap-hosts', () => {
     });
   }
   return {
-    detail: `img-src hosts for ${sources.tileHosts.join(', ')}; connect-src for ${sources.elevationHosts.join(', ')}; worker-src 'self'`,
+    detail: `img-src + connect-src allow ${requiredConnectHosts.length} required host(s) (${requiredConnectHosts.join(', ')}); data: img-src ${imgSrc.includes('data:') ? '✓' : '✗'}; worker-src 'self' ${workerSrc.includes("'self'") ? '✓' : '✗'}`,
     failures,
   };
 });

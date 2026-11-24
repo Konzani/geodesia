@@ -1,17 +1,21 @@
 /**
  * GEODESIA — Terrain Profile instrument (the default workspace view).
  *
- * Three input paths, all client-side:
- *   1. two map clicks → WGS 84 geodesic line;
- *   2. a clicked vertex route (or freehand drag) on the map;
- *   3. an uploaded CSV / TXT / TSV / XLSX table (distance+elevation or lat/lon+elevation).
+ * Simplified, map-first UX: the map stage owns ≥70% of the workspace and the
+ * flow is three plain-language steps —
+ *   1 Pick your points  (draw on the map by default; type coordinates instead)
+ *   2 Check the line    (undo / clear, live point count and length)
+ *   3 Read the profile  (plain-language sentence above the technical tables)
+ *
+ * Input paths, all client-side and all preserved:
+ *   - draw on the map (click vertices or drag a freehand trace);
+ *   - two points A → B (map clicks, or typed coordinates);
+ *   - an uploaded CSV / TXT / TSV / XLSX table (distance+elevation or lat/lon+elevation).
  *
  * Elevations come from the configured elevation endpoint chain (Geodesia edge
- * worker first, then Open-Meteo; batched, cached, retried)
- * with an explicit, designed failure state that keeps uploaded data usable.
- * Every rendered number goes through `src/math/format`; heavy libraries are
- * never imported here (map = dynamic import in MapCanvas, xlsx = dynamic import
- * inside math/parse, pdf-lib = lazy inside exports).
+ * worker first, then Open-Meteo; batched, cached, retried) with an explicit,
+ * designed failure state that keeps uploaded data usable. Every rendered number
+ * goes through `src/math/format`; heavy libraries are never imported here.
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
@@ -52,7 +56,6 @@ import { MAP_DEFAULT_VIEW } from './basemap';
 import { ProfileChart } from './ProfileChart';
 import { describeElevationEndpoint, fetchElevations } from './elevation';
 import {
-  IconCrosshair,
   IconDownload,
   IconFile,
   IconRefresh,
@@ -71,7 +74,7 @@ import {
   readFileAsText,
 } from './utils';
 
-type InputMode = 'points' | 'route' | 'upload';
+type InputMode = 'draw' | 'points' | 'upload';
 type Smoothing = 'off' | 'light' | 'medium';
 type Phase = 'idle' | 'fetching' | 'ready' | 'error';
 type ExportKind = 'csv' | 'json' | 'pdf';
@@ -105,10 +108,16 @@ const TABLE_ROW_LIMIT = 250;
 const EMPTY_SAMPLES: TerrainSample[] = [];
 
 const inputModes: ReadonlyArray<{ value: InputMode; label: string }> = [
+  { value: 'draw', label: 'Draw on map' },
   { value: 'points', label: 'Two points' },
-  { value: 'route', label: 'Route' },
-  { value: 'upload', label: 'Upload' },
+  { value: 'upload', label: 'Upload a table' },
 ];
+
+const inputHints: Readonly<Record<InputMode, string>> = {
+  draw: 'Click the map to place points. Turn on freehand tracing in Advanced options to drag a line instead.',
+  points: 'Click point A, then point B on the map. The profile follows the straight line between them.',
+  upload: 'Have a spreadsheet already? Drop a CSV, TXT or XLSX table with distance and elevation columns.',
+};
 
 const smoothingOptions: ReadonlyArray<{ value: Smoothing; label: string }> = [
   { value: 'off', label: 'Off' },
@@ -170,19 +179,30 @@ function parseVertexLines(text: string): LatLon[] {
   return points;
 }
 
+/** Plain-language headline shown above every technical table. */
+function terrainSentence(profile: TerrainResult): string {
+  const km = profile.distance / 1000;
+  const kmText = `${fmtNumber(km, km >= 10 ? 1 : 2)} km`;
+  const climb = profile.gain;
+  const drop = profile.descent;
+  if (climb < 1 && drop < 1) {
+    return `Almost flat over ${kmText} — the whole line only moves ${fmtNumber(profile.range, 0)} m up or down.`;
+  }
+  const uphill = climb >= drop;
+  const amount = uphill ? climb : drop;
+  const perKm = km > 0 ? amount / km : 0;
+  return `${uphill ? 'Uphill' : 'Downhill'} ${fmtNumber(amount, 0)} m over ${kmText} — average slope ${fmtNumber(perKm, 1)} m/km.`;
+}
+
 export default function TerrainTool() {
   /* ---------------------------------------------------------------- input */
-  const [inputMode, setInputMode] = useState<InputMode>('points');
+  const [inputMode, setInputMode] = useState<InputMode>('draw');
   const [start, setStart] = useState<LatLon | null>(null);
   const [end, setEnd] = useState<LatLon | null>(null);
-  const [route, setRoute] = useState<LatLon[]>([]);
+  const [drawPath, setDrawPath] = useState<LatLon[]>([]);
   const [freehand, setFreehand] = useState(false);
-  const [routeText, setRouteText] = useState('');
-  const [routeError, setRouteError] = useState<string | null>(null);
-
-  const [coordA, setCoordA] = useState({ lat: '', lon: '' });
-  const [coordB, setCoordB] = useState({ lat: '', lon: '' });
-  const [coordError, setCoordError] = useState<string | null>(null);
+  const [typedText, setTypedText] = useState('');
+  const [typedError, setTypedError] = useState<string | null>(null);
 
   /* ------------------------------------------------------------- sampling */
   const [sampleCount, setSampleCount] = useState(DEFAULT_SAMPLES);
@@ -216,6 +236,7 @@ export default function TerrainTool() {
   const lastFitKeyRef = useRef('');
   const fileInputId = useId();
   const samplesInputId = useId();
+  const typedId = useId();
 
   const smoothingWindow = smoothing === 'off' ? 0 : smoothing === 'light' ? 3 : 5;
 
@@ -228,21 +249,15 @@ export default function TerrainTool() {
   const mapPath = useMemo<{ points: LatLon[]; label: string } | null>(() => {
     if (inputMode === 'points') {
       if (!start || !end) return null;
-      return {
-        points: geodesicPath(start, end, sampleCount),
-        label: 'Geodesic line A → B',
-      };
+      return { points: geodesicPath(start, end, sampleCount), label: 'Two points A → B' };
     }
-    if (inputMode === 'route') {
-      if (route.length < 2) return null;
-      const sampled = geodesicPolylinePath(route, sampleCount);
-      return {
-        points: sampled.points,
-        label: `Route · ${fmtNumber(route.length, 0)} vertices`,
-      };
+    if (inputMode === 'draw') {
+      if (drawPath.length < 2) return null;
+      const sampled = geodesicPolylinePath(drawPath, sampleCount);
+      return { points: sampled.points, label: `Drawn line · ${fmtNumber(drawPath.length, 0)} points` };
     }
     return null;
-  }, [inputMode, start, end, route, sampleCount]);
+  }, [inputMode, start, end, drawPath, sampleCount]);
 
   const resetResults = useCallback(() => {
     setRawSamples(null);
@@ -314,7 +329,7 @@ export default function TerrainTool() {
         setPhase('error');
         setElevationSource(null);
         setFetchError(errorMessage(error));
-        setStatusMessage('Elevation lookup failed. Uploaded data and coordinate entry are still available.');
+        setStatusMessage('Elevation lookup failed. Uploaded data and typed coordinates are still available.');
       }
     })();
 
@@ -334,15 +349,15 @@ export default function TerrainTool() {
       if (end) list.push({ lat: end.lat, lon: end.lon, kind: 'end', label: 'B' });
       return list;
     }
-    if (inputMode === 'route') {
-      return route.map((point, index) => ({
+    if (inputMode === 'draw') {
+      return drawPath.map((point, index) => ({
         lat: point.lat,
         lon: point.lon,
         kind: 'vertex',
         label:
-          route.length > 1 && index === 0
+          drawPath.length > 1 && index === 0
             ? 'A'
-            : route.length > 1 && index === route.length - 1
+            : drawPath.length > 1 && index === drawPath.length - 1
               ? 'B'
               : undefined,
       }));
@@ -354,12 +369,34 @@ export default function TerrainTool() {
       ];
     }
     return [];
-  }, [inputMode, start, end, route, positions]);
+  }, [inputMode, start, end, drawPath, positions]);
 
   const mapLine = useMemo<ReadonlyArray<LatLon> | undefined>(() => {
     if (inputMode === 'upload') return positions.length > 1 ? positions : undefined;
     return mapPath && mapPath.points.length > 1 ? mapPath.points : undefined;
   }, [inputMode, positions, mapPath]);
+
+  /** Ground length of the line as drawn / picked (before elevation sampling). */
+  const lineLength = useMemo<number | null>(() => {
+    if (inputMode === 'points') {
+      return start && end ? geodesicInverse(start, end).distance : null;
+    }
+    if (inputMode === 'draw' && drawPath.length >= 2) {
+      let total = 0;
+      for (let index = 1; index < drawPath.length; index += 1) {
+        total += geodesicInverse(drawPath[index - 1], drawPath[index]).distance;
+      }
+      return total;
+    }
+    return null;
+  }, [inputMode, start, end, drawPath]);
+
+  const pointCount =
+    inputMode === 'points'
+      ? (start ? 1 : 0) + (end ? 1 : 0)
+      : inputMode === 'draw'
+        ? drawPath.length
+        : positions.length;
 
   /* --------------------------------------------------- fit view on changes */
   useEffect(() => {
@@ -377,27 +414,24 @@ export default function TerrainTool() {
         if (!start || (start && end)) {
           setStart(point);
           setEnd(null);
-          setCoordA({ lat: fmtNumber(point.lat, 6), lon: fmtNumber(point.lon, 6) });
-          setCoordB({ lat: '', lon: '' });
           setStatusMessage('Point A set. Click the map again to set point B.');
-        } else {
-          setEnd(point);
-          setCoordB({ lat: fmtNumber(point.lat, 6), lon: fmtNumber(point.lon, 6) });
-          setStatusMessage('Point B set. Computing the geodesic line.');
+          return;
         }
+        setEnd(point);
+        setStatusMessage('Point B set — reading the elevations along the line.');
         return;
       }
-      if (inputMode === 'route') {
-        setRoute((previous) => [...previous, point]);
-        setStatusMessage(`Route vertex ${fmtNumber(route.length + 1, 0)} added.`);
+      if (inputMode === 'draw') {
+        setDrawPath((previous) => [...previous, point]);
+        setStatusMessage(`Point ${fmtNumber(drawPath.length + 1, 0)} added.`);
       }
     },
-    [inputMode, start, end, route.length],
+    [inputMode, start, end, drawPath.length],
   );
 
   const handleStrokeDrawn = useCallback((points: LatLon[]) => {
-    setRoute(points);
-    setStatusMessage(`Freehand route captured with ${fmtNumber(points.length, 0)} vertices.`);
+    setDrawPath(points);
+    setStatusMessage(`Traced line captured with ${fmtNumber(points.length, 0)} points.`);
     fitRef.current?.(points);
   }, []);
 
@@ -417,22 +451,16 @@ export default function TerrainTool() {
     resetResults();
     setStatusMessage('');
     lastFitKeyRef.current = '';
-    if (mode === 'upload') {
-      setRouteError(null);
-      setCoordError(null);
-    }
+    if (mode !== 'upload') setUploadError(null);
   };
 
   const clearAll = () => {
     setStart(null);
     setEnd(null);
-    setRoute([]);
+    setDrawPath([]);
     setUploaded(null);
-    setCoordA({ lat: '', lon: '' });
-    setCoordB({ lat: '', lon: '' });
-    setRouteText('');
-    setRouteError(null);
-    setCoordError(null);
+    setTypedText('');
+    setTypedError(null);
     setUploadError(null);
     setMapError(null);
     resetResults();
@@ -440,40 +468,39 @@ export default function TerrainTool() {
     setStatusMessage('Cleared.');
   };
 
-  /* ---------------------------------------------------- manual coordinates */
-  const applyCoordinates = () => {
-    const latA = parseCoordinate(coordA.lat, 90);
-    const lonA = parseCoordinate(coordA.lon, 180);
-    const latB = parseCoordinate(coordB.lat, 90);
-    const lonB = parseCoordinate(coordB.lon, 180);
-    if (latA === null || lonA === null) {
-      setCoordError('Point A needs a latitude within ±90° and a longitude within ±180°, decimal or DMS.');
-      return;
+  const undoLast = () => {
+    if (inputMode === 'points') {
+      if (end) setEnd(null);
+      else setStart(null);
+    } else if (inputMode === 'draw') {
+      setDrawPath((previous) => previous.slice(0, -1));
+    } else {
+      setUploaded(null);
+      resetResults();
     }
-    if (latB === null || lonB === null) {
-      setCoordError('Point B needs a latitude within ±90° and a longitude within ±180°, decimal or DMS.');
-      return;
-    }
-    setCoordError(null);
-    const nextStart = { lat: latA, lon: lonA };
-    const nextEnd = { lat: latB, lon: lonB };
-    setStart(nextStart);
-    setEnd(nextEnd);
-    setInputMode('points');
     lastFitKeyRef.current = '';
-    setStatusMessage('Coordinates applied. Computing the geodesic line.');
+    setStatusMessage('Removed the last point.');
   };
 
-  const applyRouteText = () => {
+  /* ------------------------------------------------------ typed coordinates */
+  const applyTypedCoordinates = () => {
     try {
-      const points = parseVertexLines(routeText);
-      setRoute(points);
-      setRouteError(null);
-      setInputMode('route');
-      setStatusMessage(`Route loaded with ${fmtNumber(points.length, 0)} vertices.`);
+      const points = parseVertexLines(typedText);
+      setTypedError(null);
+      if (points.length === 2) {
+        setInputMode('points');
+        setStart(points[0]);
+        setEnd(points[1]);
+        setStatusMessage('Two typed points loaded as A → B.');
+      } else {
+        setInputMode('draw');
+        setDrawPath(points);
+        setStatusMessage(`Typed line loaded with ${fmtNumber(points.length, 0)} points.`);
+      }
+      resetResults();
       fitRef.current?.(points);
     } catch (error) {
-      setRouteError(errorMessage(error));
+      setTypedError(errorMessage(error));
     }
   };
 
@@ -775,345 +802,317 @@ export default function TerrainTool() {
 
   /* --------------------------------------------------------------- render */
   const hasInput =
-    inputMode === 'points'
-      ? Boolean(start || end)
-      : inputMode === 'route'
-        ? route.length > 0
-        : Boolean(uploaded);
+    inputMode === 'points' ? Boolean(start || end) : inputMode === 'draw' ? drawPath.length > 0 : Boolean(uploaded);
 
-  const clearMap = () => {
-    if (inputMode === 'points') {
-      setStart(null);
-      setEnd(null);
-      setCoordA({ lat: '', lon: '' });
-      setCoordB({ lat: '', lon: '' });
-    } else if (inputMode === 'route') {
-      setRoute([]);
-    } else {
-      setUploaded(null);
-      setRawSamples(null);
-      setPositions([]);
-      setPhase('idle');
-    }
-    resetResults();
-    setStatusMessage('Cleared.');
-  };
+  const mapTitle =
+    inputMode === 'points' ? 'Pick two points' : inputMode === 'upload' ? 'Uploaded trace' : 'Draw your line';
+
+  const mapMeta =
+    inputMode === 'points'
+      ? start && end
+        ? `A → B · ${fmtLength(geodesicInverse(start, end).distance, 'km')}`
+        : start
+          ? 'Point A set · click B'
+          : 'Click A, then B'
+      : inputMode === 'upload'
+        ? uploaded
+          ? `${fmtNumber(uploaded.rows, 0)} rows`
+          : 'No trace yet'
+        : lineLength !== null
+          ? `${fmtNumber(drawPath.length, 0)} points · ${fmtLength(lineLength, 'km')}`
+          : 'Click or drag on the map';
+
+  const mapHint =
+    inputMode === 'points' ? (
+      <>
+        <strong>{start && end ? 'Line set.' : start ? 'Now click point B.' : 'Click point A, then point B.'}</strong>{' '}
+        Zoom in to see plots and boundaries; the profile samples elevations along the line.
+      </>
+    ) : inputMode === 'upload' ? (
+      <>
+        <strong>Trace from a file.</strong> The map previews the uploaded trace; the profile comes from the
+        elevation column in your table.
+      </>
+    ) : (
+      <>
+        <strong>{freehand ? 'Drag to trace a line.' : 'Click to place points.'}</strong> Zoom in to see
+        plots and boundaries. {freehand ? 'Release to finish the line.' : 'Turn on freehand tracing in Advanced options to drag a line instead.'}
+      </>
+    );
+
+  const stepStatus = phase === 'fetching' ? 'Reading elevations…' : profile ? 'Profile ready' : 'Waiting for a line';
 
   return (
-    <div className="tool">
+    <div className="tool-page">
       <p className="sr-only" aria-live="polite">
         {statusMessage}
       </p>
 
-      {/* ------------------------------------------------------------- aside */}
-      <div className="tool__aside">
-        <Panel
-          title="Elevation source"
-          meta={inputMode === 'upload' ? 'File' : 'Map or manual'}
-          tight
-        >
-          <Segmented
-            options={inputModes}
-            value={inputMode}
-            onChange={switchInputMode}
-            label="Terrain input mode"
-          />
-          {inputMode === 'points' ? (
-            <div className="stack">
-              <p className="tool-hint">
-                Click the map to set <strong>A</strong>, then <strong>B</strong>. Prefer typing?
-                Coordinates accept decimal degrees or DMS.
-              </p>
-              <div className="field-row">
-                <Field label="A latitude" htmlFor="terrain-a-lat" hint="e.g. -1.2864">
-                  <input
-                    id="terrain-a-lat"
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    value={coordA.lat}
-                    placeholder="-1.286400"
-                    onChange={(event) => setCoordA((previous) => ({ ...previous, lat: event.target.value }))}
-                  />
-                </Field>
-                <Field label="A longitude" htmlFor="terrain-a-lon" hint="e.g. 36.8172">
-                  <input
-                    id="terrain-a-lon"
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    value={coordA.lon}
-                    placeholder="36.817200"
-                    onChange={(event) => setCoordA((previous) => ({ ...previous, lon: event.target.value }))}
-                  />
-                </Field>
-                <Field label="B latitude" htmlFor="terrain-b-lat">
-                  <input
-                    id="terrain-b-lat"
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    value={coordB.lat}
-                    placeholder="-1.292100"
-                    onChange={(event) => setCoordB((previous) => ({ ...previous, lat: event.target.value }))}
-                  />
-                </Field>
-                <Field label="B longitude" htmlFor="terrain-b-lon">
-                  <input
-                    id="terrain-b-lon"
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    value={coordB.lon}
-                    placeholder="36.821900"
-                    onChange={(event) => setCoordB((previous) => ({ ...previous, lon: event.target.value }))}
-                  />
-                </Field>
+      <div className="tool-stage">
+        {/* -------------------------------------------------------- controls */}
+        <div className="tool-stage__side">
+          <section className="step-card" aria-labelledby="terrain-step-1">
+            <div className="step-card__head">
+              <span className="step-card__num" aria-hidden="true">
+                1
+              </span>
+              <h3 className="step-card__title" id="terrain-step-1">
+                Pick your points
+              </h3>
+            </div>
+            <div className="step-card__body">
+              <Segmented
+                options={inputModes}
+                value={inputMode}
+                onChange={switchInputMode}
+                label="How do you want to set the line?"
+                className="segmented--full"
+              />
+              <p className="tool-hint">{inputHints[inputMode]}</p>
+
+              {inputMode === 'upload' ? (
+                <div className="stack stack--sm">
+                  <div className="dropzone-wrap">
+                    <label
+                      className={cx('dropzone', 'dropzone--compact')}
+                      htmlFor={fileInputId}
+                      data-dragging={dragging || undefined}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        setDragging(true);
+                      }}
+                      onDragLeave={() => setDragging(false)}
+                      onDrop={handleDrop}
+                    >
+                      <IconUpload size={18} />
+                      <span className="dropzone__title">
+                        {uploadBusy ? 'Reading file…' : 'Drop a CSV, TXT or XLSX'}
+                      </span>
+                      <span className="dropzone__hint">or click to browse</span>
+                    </label>
+                    <input
+                      id={fileInputId}
+                      type="file"
+                      accept=".csv,.txt,.tsv,.xlsx,.xls"
+                      className="sr-only"
+                      onChange={handleFileInput}
+                    />
+                  </div>
+                  {uploaded ? (
+                    <div className="file-chip">
+                      <IconFile size={14} />
+                      <span className="file-chip__name" title={uploaded.name}>
+                        {uploaded.name}
+                      </span>
+                      <span className="file-chip__meta">
+                        {formatFileSize(uploaded.size)} · {fmtNumber(uploaded.rows, 0)} rows
+                      </span>
+                    </div>
+                  ) : null}
+                  {uploadError ? <Notice tone="err">{uploadError}</Notice> : null}
+                  <p className="tool-hint">
+                    Columns can be distance + elevation, or latitude + longitude + elevation. Header names
+                    are detected automatically.
+                  </p>
+                </div>
+              ) : null}
+
+              <details className="advanced">
+                <summary>Type coordinates instead</summary>
+                <div className="advanced__body">
+                  <Field
+                    label="Coordinates"
+                    htmlFor={typedId}
+                    hint="One “lat, lon” pair per line. Two lines make A → B; more make a line."
+                  >
+                    <textarea
+                      id={typedId}
+                      className="textarea"
+                      rows={4}
+                      value={typedText}
+                      placeholder={'-1.2864, 36.8172\n-1.2890, 36.8201\n-1.2921, 36.8219'}
+                      onChange={(event) => setTypedText(event.target.value)}
+                    />
+                  </Field>
+                  {typedError ? <Notice tone="err">{typedError}</Notice> : null}
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={applyTypedCoordinates}
+                    disabled={!typedText.trim()}
+                  >
+                    <IconRoute size={14} /> Plot these points
+                  </button>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <section className="step-card" aria-labelledby="terrain-step-2">
+            <div className="step-card__head">
+              <span className="step-card__num" aria-hidden="true">
+                2
+              </span>
+              <h3 className="step-card__title" id="terrain-step-2">
+                Check the line
+              </h3>
+              <span className="step-card__status">{stepStatus}</span>
+            </div>
+            <div className="step-card__body">
+              <div className="unit-chips">
+                <span className="unit-chip">
+                  <strong>{fmtNumber(pointCount, 0)}</strong> {pointCount === 1 ? 'point' : 'points'}
+                </span>
+                {lineLength !== null ? (
+                  <span className="unit-chip">
+                    <strong>{fmtLength(lineLength, 'km')}</strong> long
+                  </span>
+                ) : null}
+                {phase === 'fetching' ? (
+                  <span className="unit-chip unit-chip--accent">
+                    <strong>
+                      {fmtNumber(fetchProgress?.completed ?? 0, 0)}/{fmtNumber(fetchProgress?.total ?? 0, 0)}
+                    </strong>{' '}
+                    elevations
+                  </span>
+                ) : null}
               </div>
-              {coordError ? <Notice tone="err">{coordError}</Notice> : null}
               <div className="btn-row">
-                <button type="button" className="btn btn--sm" onClick={applyCoordinates}>
-                  <IconCrosshair size={14} /> Apply coordinates
+                <button
+                  type="button"
+                  className="btn btn--sm btn--quiet"
+                  onClick={undoLast}
+                  disabled={!hasInput}
+                >
+                  Undo last point
                 </button>
-                <button type="button" className="btn btn--sm btn--quiet" onClick={clearMap} disabled={!hasInput}>
+                <button
+                  type="button"
+                  className="btn btn--sm btn--quiet"
+                  onClick={clearAll}
+                  disabled={!hasInput}
+                >
                   <IconTrash size={14} /> Clear
                 </button>
               </div>
             </div>
-          ) : null}
+          </section>
 
-          {inputMode === 'route' ? (
-            <div className="stack">
-              <p className="tool-hint">
-                Click the map to add route vertices (in order). Close the last leg by finishing the
-                profile — the line is sampled geodesically between vertices.
-              </p>
+          <details className="advanced">
+            <summary>Advanced options</summary>
+            <div className="advanced__body">
+              <Field
+                label="Sample count"
+                htmlFor={samplesInputId}
+                unit="stations"
+                hint={`How many points to sample along the line (${SAMPLE_MIN}–${SAMPLE_MAX}).`}
+              >
+                <input
+                  id={samplesInputId}
+                  className="input"
+                  type="number"
+                  inputMode="numeric"
+                  min={SAMPLE_MIN}
+                  max={SAMPLE_MAX}
+                  step={1}
+                  value={sampleInput}
+                  onChange={(event) => applySampleCount(event.target.value)}
+                  onBlur={() => setSampleInput(String(sampleCount))}
+                />
+              </Field>
+              <div className="field">
+                <span className="field__label">
+                  <span>Smoothing</span>
+                  <span className="field__unit">moving average</span>
+                </span>
+                <Segmented
+                  options={smoothingOptions}
+                  value={smoothing}
+                  onChange={setSmoothing}
+                  label="Elevation smoothing"
+                  className="segmented--full"
+                />
+              </div>
               <label className="check">
                 <input
                   type="checkbox"
                   checked={freehand}
                   onChange={(event) => setFreehand(event.target.checked)}
                 />
-                <span>Freehand trace — drag on the map (mouse; taps add vertices)</span>
+                <span>
+                  Freehand tracing
+                  <span className="check__note">Drag on the map to trace a line instead of clicking points</span>
+                </span>
               </label>
-              <Field
-                label="Paste vertices"
-                htmlFor="terrain-route-text"
-                hint="One “lat, lon” pair per line; decimal or DMS. Applies all vertices."
-              >
-                <textarea
-                  id="terrain-route-text"
-                  className="textarea"
-                  rows={4}
-                  value={routeText}
-                  placeholder={'-1.2864, 36.8172\n-1.2890, 36.8201\n-1.2921, 36.8219'}
-                  onChange={(event) => setRouteText(event.target.value)}
-                />
-              </Field>
-              {routeError ? <Notice tone="err">{routeError}</Notice> : null}
-              <div className="btn-row">
-                <button type="button" className="btn btn--sm" onClick={applyRouteText} disabled={!routeText.trim()}>
-                  <IconRoute size={14} /> Load route
-                </button>
+              <p className="tool-hint">
+                Elevations are fetched in batches of {fmtNumber(100, 0)} from the Geodesia edge service
+                first, then Open-Meteo, and cached for this session. A failed lookup never discards your
+                input.{elevationSource ? ` Last lookup: ${elevationSource}.` : ''}
+              </p>
+              <p className="tool-hint">
+                Terrain bands: flat &lt; {fmtNumber(TERRAIN_THRESHOLDS.flat, 0)}% · gentle &lt;{' '}
+                {fmtNumber(TERRAIN_THRESHOLDS.gentle, 0)}% · rolling &lt;{' '}
+                {fmtNumber(TERRAIN_THRESHOLDS.rolling, 0)}% · hilly &lt;{' '}
+                {fmtNumber(TERRAIN_THRESHOLDS.hilly, 0)}% average grade.
+              </p>
+            </div>
+          </details>
+        </div>
+
+        {/* ------------------------------------------------------------ map */}
+        <div className="tool-stage__hero">
+          <Panel
+            className="stage-panel stage-panel--map"
+            title={mapTitle}
+            meta={mapMeta}
+            actions={
+              <Toolbar label="Map actions">
                 <button
                   type="button"
                   className="btn btn--sm btn--quiet"
-                  onClick={() => setRoute((previous) => previous.slice(0, -1))}
-                  disabled={route.length === 0}
+                  onClick={clearAll}
+                  disabled={!hasInput}
                 >
-                  Remove last
-                </button>
-                <button type="button" className="btn btn--sm btn--quiet" onClick={clearMap} disabled={!hasInput}>
                   <IconTrash size={14} /> Clear
                 </button>
-              </div>
-            </div>
-          ) : null}
-
-          {inputMode === 'upload' ? (
-            <div className="stack">
-              <div className="dropzone-wrap">
-                <label
-                  className={cx('dropzone', 'dropzone--compact')}
-                  htmlFor={fileInputId}
-                  data-dragging={dragging || undefined}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setDragging(true);
-                  }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={handleDrop}
-                >
-                  <IconUpload size={18} />
-                  <span className="dropzone__title">
-                    {uploadBusy ? 'Reading file…' : 'Drop CSV, TXT or XLSX'}
-                  </span>
-                  <span className="dropzone__hint">or click to browse</span>
-                </label>
-                <input
-                  id={fileInputId}
-                  type="file"
-                  accept=".csv,.txt,.tsv,.xlsx,.xls"
-                  className="sr-only"
-                  onChange={handleFileInput}
-                />
-              </div>
-              {uploaded ? (
-                <div className="file-chip">
-                  <IconFile size={14} />
-                  <span className="file-chip__name" title={uploaded.name}>
-                    {uploaded.name}
-                  </span>
-                  <span className="file-chip__meta">
-                    {formatFileSize(uploaded.size)} · {fmtNumber(uploaded.rows, 0)} rows
-                  </span>
+              </Toolbar>
+            }
+          >
+            <div className="stage-hero">
+              <MapCanvas
+                mode={inputMode === 'points' ? 'pick-two' : inputMode === 'draw' ? 'draw' : 'view'}
+                center={DEFAULT_CENTER}
+                zoom={DEFAULT_ZOOM}
+                markers={markers}
+                line={mapLine}
+                freehand={inputMode === 'draw' && freehand}
+                onMapClick={handleMapClick}
+                onStrokeDrawn={handleStrokeDrawn}
+                onMapError={handleMapError}
+                onBasemapChange={setBasemap}
+                onReady={handleMapReady}
+                ariaLabel="Terrain profile map: click or draw the line whose profile you want"
+              >
+                <div className="map-overlay map-overlay--tl">
+                  <p className="map-hint">{mapHint}</p>
                 </div>
-              ) : null}
-              {uploadError ? <Notice tone="err">{uploadError}</Notice> : null}
-              <p className="tool-hint">
-                Accepted columns: distance + elevation, or latitude + longitude + elevation.
-                Header names are detected automatically.
-              </p>
+              </MapCanvas>
             </div>
-          ) : null}
-        </Panel>
-
-        <Panel title="Sampling" tight>
-          <div className="field-row">
-            <Field
-              label="Stations"
-              htmlFor={samplesInputId}
-              unit="count"
-              hint={`${SAMPLE_MIN}–${SAMPLE_MAX} samples`}
-            >
-              <input
-                id={samplesInputId}
-                className="input"
-                type="number"
-                inputMode="numeric"
-                min={SAMPLE_MIN}
-                max={SAMPLE_MAX}
-                step={1}
-                value={sampleInput}
-                onChange={(event) => applySampleCount(event.target.value)}
-                onBlur={() => setSampleInput(String(sampleCount))}
-              />
-            </Field>
-            <div className="field">
-              <span className="field__label">
-                <span>Smoothing</span>
-                <span className="field__unit">moving average</span>
-              </span>
-              <Segmented
-                options={smoothingOptions}
-                value={smoothing}
-                onChange={setSmoothing}
-                label="Elevation smoothing"
-                className="segmented--full"
-              />
-            </div>
-          </div>
-          <p className="tool-hint">
-            Elevations are fetched in batches of {fmtNumber(100, 0)} from the Geodesia edge service
-            first, then Open-Meteo, and cached for this session. A failed lookup never discards your
-            input.
-            {elevationSource ? ` Last lookup: ${elevationSource}.` : ''}
-          </p>
-        </Panel>
+            {mapError ? (
+              <Notice tone="warn" title="Basemap unavailable">
+                {mapError} Typed coordinates, pasted lines and uploaded data still work; the profile
+                maths is unaffected.
+              </Notice>
+            ) : null}
+          </Panel>
+        </div>
       </div>
 
-      {/* -------------------------------------------------------------- main */}
-      <div className="tool__main">
+      {/* ------------------------------------------------------------ results */}
+      <div className="tool-results">
         <Panel
-          title="Map"
-          meta={inputMode === 'upload' ? 'Uploaded trace' : (basemap?.label ?? 'WGS 84 basemap')}
-          tight
-          actions={
-            <Toolbar label="Map actions">
-              <button type="button" className="btn btn--sm btn--quiet" onClick={clearMap} disabled={!hasInput}>
-                <IconTrash size={14} /> Clear
-              </button>
-            </Toolbar>
-          }
-        >
-          <MapCanvas
-            mode={inputMode === 'points' ? 'pick-two' : inputMode === 'route' ? 'draw' : 'view'}
-            center={DEFAULT_CENTER}
-            zoom={DEFAULT_ZOOM}
-            markers={markers}
-            line={mapLine}
-            freehand={inputMode === 'route' && freehand}
-            onMapClick={handleMapClick}
-            onStrokeDrawn={handleStrokeDrawn}
-            onMapError={handleMapError}
-            onBasemapChange={setBasemap}
-            onReady={handleMapReady}
-            ariaLabel="Terrain profile map: set endpoints or draw a route"
-          >
-            <div className="map-overlay map-overlay--tl">
-              <div className="map-hud">
-                {inputMode === 'points' ? (
-                  start && end ? (
-                    <>
-                      <span>A → B</span>
-                      <strong>{fmtLength(geodesicInverse(start, end).distance, 'km')}</strong>
-                    </>
-                  ) : start ? (
-                    <>
-                      <span>Point A set</span>
-                      <strong>Click to set B</strong>
-                    </>
-                  ) : (
-                    <>
-                      <span>No endpoints</span>
-                      <strong>Click to set A</strong>
-                    </>
-                  )
-                ) : inputMode === 'route' ? (
-                  <>
-                    <span>Route vertices</span>
-                    <strong>{fmtNumber(route.length, 0)}</strong>
-                  </>
-                ) : (
-                  <>
-                    <span>Uploaded trace</span>
-                    <strong>{uploaded ? fmtNumber(uploaded.rows, 0) + ' rows' : 'No trace'}</strong>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="map-overlay map-overlay--bl">
-              <p className="map-hint">
-                {inputMode === 'points' ? (
-                  <>
-                    <strong>Click A, then B.</strong> The profile samples the WGS 84 geodesic between
-                    them. Keyboard alternative: type coordinates in the panel.
-                  </>
-                ) : inputMode === 'route' ? (
-                  <>
-                    <strong>Click to add vertices.</strong>{' '}
-                    {freehand ? 'Or drag to trace a freehand line.' : 'Enable freehand to drag-trace.'}
-                  </>
-                ) : (
-                  <>
-                    <strong>Trace from file.</strong> The map is a preview; switch to Two points to
-                    sample elevations online.
-                  </>
-                )}
-              </p>
-            </div>
-          </MapCanvas>
-          {mapError ? (
-            <Notice tone="warn" title="Basemap unavailable">
-              {mapError} Coordinate entry, route paste and uploaded data still work; the profile maths
-              is unaffected.
-            </Notice>
-          ) : null}
-        </Panel>
-
-        <Panel
-          title="Profile metrics"
-          meta={profile ? sourceLabel : 'Awaiting input'}
+          title="3 · Read the profile"
+          meta={profile ? sourceLabel : phase === 'fetching' ? 'Reading elevations…' : 'Awaiting a line'}
           actions={
             <Toolbar label="Export profile">
               <button
@@ -1144,83 +1143,79 @@ export default function TerrainTool() {
           }
           footer={
             <span className="panel__meta">
-              Category thresholds · flat &lt; {fmtNumber(TERRAIN_THRESHOLDS.flat, 0)}% · gentle &lt;{' '}
-              {fmtNumber(TERRAIN_THRESHOLDS.gentle, 0)}% · rolling &lt;{' '}
-              {fmtNumber(TERRAIN_THRESHOLDS.rolling, 0)}% · hilly &lt;{' '}
-              {fmtNumber(TERRAIN_THRESHOLDS.hilly, 0)}%
+              Technical metrics, the chart and the station table are below · WGS 84 ·{' '}
+              {basemap ? `basemap: ${basemap.label}` : 'basemap loading'}
             </span>
           }
         >
           {profile ? (
-            <ReadoutGrid label="Terrain profile metrics">
-              <Readout
-                label="Distance"
-                value={fmtNumber(profile.distance / 1000, 2)}
-                unit="km"
-                tone="accent"
-              />
-              <Readout
-                label="Elevation gain"
-                value={fmtNumber(profile.gain, 1)}
-                unit="m"
-                delta={`+${fmtNumber(profile.gain, 1)} m climbed`}
-              />
-              <Readout label="Descent" value={fmtNumber(profile.descent, 1)} unit="m" />
-              <Readout label="Net change" value={fmtSigned(profile.net, 1)} unit="m" />
-              <Readout label="Minimum" value={fmtNumber(profile.min, 1)} unit="m" />
-              <Readout label="Maximum" value={fmtNumber(profile.max, 1)} unit="m" />
-              <Readout label="Range" value={fmtNumber(profile.range, 1)} unit="m" />
-              <Readout label="Mean elevation" value={fmtNumber(profile.meanElevation, 1)} unit="m" />
-              <Readout
-                label="Average grade"
-                value={fmtNumber(profile.avgSlopePct, 1)}
-                unit="%"
-              />
-              <Readout
-                label="Maximum grade"
-                value={fmtNumber(profile.maxSlopePct, 1)}
-                unit="%"
-                delta={`${fmtNumber(profile.maxSlopeDeg, 1)}° at ${fmtNumber(profile.maxSlopeAt / 1000, 2)} km`}
-              />
-              <Readout
-                label="Terrain category"
-                value={<Badge tone={categoryTone(profile.category)}>{profile.category}</Badge>}
-              />
-              <Readout label="Stations" value={fmtNumber(profile.samples.length, 0)} unit="samples" />
-            </ReadoutGrid>
+            <>
+              <div className="result-line">
+                <p className="result-line__text">{terrainSentence(profile)}</p>
+                <div className="unit-chips">
+                  <span className="unit-chip">
+                    <strong>{fmtLength(profile.distance, 'km')}</strong> along the ground
+                  </span>
+                  <span className="unit-chip">
+                    <strong>{fmtNumber(profile.gain, 0)} m</strong> climbed
+                  </span>
+                  <span className="unit-chip">
+                    <strong>{fmtNumber(profile.avgSlopePct, 1)}%</strong> average grade
+                  </span>
+                  <span className="unit-chip">
+                    <strong>{fmtNumber(profile.range, 0)} m</strong> elevation range
+                  </span>
+                  <span className="unit-chip unit-chip--accent">
+                    <Badge tone={categoryTone(profile.category)}>{profile.category}</Badge> terrain
+                  </span>
+                </div>
+              </div>
+              {warnings.length > 0 ? (
+                <div className="stack stack--sm">
+                  {warnings.map((warning, index) => (
+                    <Notice key={`warning-${index}`} tone="info">
+                      {warning}
+                    </Notice>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : phase === 'fetching' ? (
+            <EmptyState
+              icon={<IconTerrain size={22} />}
+              title="Reading the elevations…"
+              action={null}
+            >
+              {fmtNumber(fetchProgress?.completed ?? 0, 0)} of{' '}
+              {fmtNumber(fetchProgress?.total ?? 0, 0)} samples fetched from the elevation service.
+            </EmptyState>
           ) : (
             <EmptyState
               icon={<IconTerrain size={22} />}
-              title="No profile computed yet"
+              title="No profile yet"
               action={
                 inputMode === 'upload' ? null : (
                   <button type="button" className="btn btn--sm btn--primary" onClick={() => switchInputMode('upload')}>
-                    <IconUpload size={14} /> Upload data instead
+                    <IconUpload size={14} /> Upload a table instead
                   </button>
                 )
               }
             >
-              Set two points on the map, draw a route, or upload a table with distance and elevation
-              columns. Metrics appear here as soon as the profile is sampled.
+              Draw a line on the map (or set two points, type coordinates or upload a table) — the
+              profile appears here automatically.
             </EmptyState>
           )}
-          {warnings.length > 0 ? (
-            <div className="stack stack--sm">
-              {warnings.map((warning, index) => (
-                <Notice key={`warning-${index}`} tone="info">
-                  {warning}
-                </Notice>
-              ))}
-            </div>
-          ) : null}
-          {exportError ? <Notice tone="err">{exportError}</Notice> : null}
           {fetchError ? (
             <Notice
               tone="err"
               title="Elevation lookup failed"
               action={
                 <div className="btn-row">
-                  <button type="button" className="btn btn--sm" onClick={() => setRetryToken((value) => value + 1)}>
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={() => setRetryToken((value) => value + 1)}
+                  >
                     <IconRefresh size={14} /> Retry
                   </button>
                   <button type="button" className="btn btn--sm" onClick={() => switchInputMode('upload')}>
@@ -1229,8 +1224,8 @@ export default function TerrainTool() {
                 </div>
               }
             >
-              {fetchError} The map line is kept, but no profile was computed. Upload a CSV/TXT/XLSX
-              with distance and elevation columns to work offline.
+              {fetchError} The line is kept, but no profile was computed. Upload a CSV/TXT/XLSX with
+              distance and elevation columns to work offline.
             </Notice>
           ) : null}
         </Panel>
@@ -1280,6 +1275,60 @@ export default function TerrainTool() {
         )}
 
         <Panel
+          title="Profile metrics"
+          meta={
+            profile
+              ? `${fmtNumber(profile.samples.length, 0)} samples${elevationSource ? ` · ${elevationSource}` : ''}`
+              : 'No data'
+          }
+          footer={
+            <span className="panel__meta">
+              Slope is percent grade; positive values are uphill. All figures round for display only.
+            </span>
+          }
+        >
+          {profile ? (
+            <ReadoutGrid label="Terrain profile metrics">
+              <Readout
+                label="Distance"
+                value={fmtNumber(profile.distance / 1000, 2)}
+                unit="km"
+                tone="accent"
+              />
+              <Readout
+                label="Elevation gain"
+                value={fmtNumber(profile.gain, 1)}
+                unit="m"
+                delta={`+${fmtNumber(profile.gain, 1)} m climbed`}
+              />
+              <Readout label="Descent" value={fmtNumber(profile.descent, 1)} unit="m" />
+              <Readout label="Net change" value={fmtSigned(profile.net, 1)} unit="m" />
+              <Readout label="Minimum" value={fmtNumber(profile.min, 1)} unit="m" />
+              <Readout label="Maximum" value={fmtNumber(profile.max, 1)} unit="m" />
+              <Readout label="Range" value={fmtNumber(profile.range, 1)} unit="m" />
+              <Readout label="Mean elevation" value={fmtNumber(profile.meanElevation, 1)} unit="m" />
+              <Readout label="Average grade" value={fmtNumber(profile.avgSlopePct, 1)} unit="%" />
+              <Readout
+                label="Maximum grade"
+                value={fmtNumber(profile.maxSlopePct, 1)}
+                unit="%"
+                delta={`${fmtNumber(profile.maxSlopeDeg, 1)}° at ${fmtNumber(profile.maxSlopeAt / 1000, 2)} km`}
+              />
+              <Readout
+                label="Terrain category"
+                value={<Badge tone={categoryTone(profile.category)}>{profile.category}</Badge>}
+              />
+              <Readout label="Stations" value={fmtNumber(profile.samples.length, 0)} unit="samples" />
+            </ReadoutGrid>
+          ) : (
+            <EmptyState icon={<IconFile size={20} />} title="No metrics yet">
+              Metrics appear as soon as the profile has been sampled.
+            </EmptyState>
+          )}
+          {exportError ? <Notice tone="err">{exportError}</Notice> : null}
+        </Panel>
+
+        <Panel
           title="Station table"
           meta={
             profile
@@ -1299,14 +1348,14 @@ export default function TerrainTool() {
               />
               {stationRows.length > TABLE_ROW_LIMIT ? (
                 <p className="tool-hint">
-                  Table preview limited to {fmtNumber(TABLE_ROW_LIMIT, 0)} rows — export CSV or PDF for
-                  the full station list.
+                  Table preview limited to {fmtNumber(TABLE_ROW_LIMIT, 0)} rows — export CSV or PDF for the
+                  full station list.
                 </p>
               ) : null}
             </>
           ) : (
             <EmptyState icon={<IconFile size={20} />} title="No station data">
-              Stations appear once a line, route or uploaded table has been sampled.
+              Stations appear once a line, typed route or uploaded table has been sampled.
             </EmptyState>
           )}
         </Panel>

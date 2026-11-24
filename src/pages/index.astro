@@ -52,7 +52,7 @@ const faqs = [
   },
   {
     q: 'Do the instruments work offline?',
-    a: 'Once a page has loaded, all computation works without a network connection. Two features degrade gracefully offline: the map basemap needs tiles, and elevation sampling needs the elevation endpoint. In both cases the tools stay usable through manual coordinate entry and CSV/XLSX upload.',
+    a: 'Once a page has loaded, all computation works without a network connection. The basemap is cached — tiles you have already viewed come from the Cloudflare edge and the browser’s service-worker cache, so a repeat visit usually redraws the same area offline — but panning to new ground, and every elevation sample, still needs a connection. If the map cannot load at all, the tools stay usable through manual coordinate entry and CSV/XLSX upload.',
   },
 ];
 

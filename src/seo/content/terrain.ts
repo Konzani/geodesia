@@ -3,24 +3,25 @@ import type { ToolPageContent } from './types';
 export const terrainContent: ToolPageContent = {
   slug: 'terrain-profile',
   eyebrow: 'Instrument 01 · Elevation',
-  h1: 'Elevation cross-sections from a line, a route, or a survey sheet',
+  h1: 'Elevation cross-sections drawn on the map or loaded from a survey sheet',
   lede:
-    'Drop two points on the map, draw the alignment you actually intend to build, or load the levels you already reduced — Geodesia samples the ground along that line and returns a cross-section with climb, descent, gradient and slope classification, every figure traceable to a station.',
+    'The map is the main working area and opens on satellite imagery, so field boundaries, tracks and plots are visible before you draw. Trace the line you mean to build — or load the levels you already reduced — and Geodesia samples the ground along it and returns a cross-section with climb, descent, gradient and slope class, every figure traceable to a station.',
 
   intro: [
+    'The map is the largest part of the workspace and opens on satellite imagery. Satellite is the default; Terrain and Streets sit a click away in the switcher inside the map, and the Labels control adds place and boundary names over the imagery. At zoom 17–19 the imagery is sharp enough to see plot boundaries, field edges, buildings and tracks, which is what makes drawing a line on it useful rather than decorative. Map tiles are cached — at the Geodesia edge where a layer is served through it, and again in your browser by a service worker — so a second visit to the same area loads quickly.',
     'A terrain profile is a one-dimensional reading of a two-dimensional surface. The instrument samples ground elevation at a fixed interval along your line, accumulates the horizontal distance geodesically on the WGS 84 ellipsoid, and differences consecutive elevations to separate climb from descent. The result is a cross-section you can read at a glance and a station table you can audit line by line.',
-    'Three input paths exist because profiles are made at three different stages of a job. Two map clicks answer a route question before a site visit — is this saddle better than that one, and by how much? A drawn route follows the alignment of a pipeline, access track or transmission line, including its bends. Uploading a CSV, TXT or XLSX file is the survey path: your reduced levels are authoritative, and the instrument should not silently replace them with a public elevation surface.',
+    'Drawing on the map is the quick path, and it is the one most questions need. Drag one alignment and you can see which line climbs less before a site visit. A drawn route follows the alignment of a pipeline, access track or transmission line, including its bends; a straight two-point line and a multi-vertex route are separate modes for the same sampling engine. Uploading a CSV, TXT or XLSX file is the survey path: your reduced levels are authoritative, and the instrument should not silently replace them with a public elevation surface.',
     'Distance is the part most profile tools get wrong. Sampling at a constant spacing in degrees gives station intervals that vary with latitude, and a rhumb-line chord is not the line a contractor measures. Geodesia solves the inverse geodesic problem between stations, so the cumulative chainage is the distance on the ellipsoid, and the bearing reported for each leg is the forward azimuth at that station.',
   ],
 
   features: [
     {
-      title: 'Two-point geodesic line',
-      text: 'Click a start and an end point; the line drawn is the geodesic between them, and the chainage reported is the inverse geodesic distance on WGS 84 — not a degree-fraction approximation.',
+      title: 'Satellite imagery by default',
+      text: 'The map opens on high-resolution aerial imagery (Esri World Imagery). Field boundaries, plots, buildings and tracks are legible from roughly zoom 17 and sharp by 19, so the line is drawn over the ground rather than over a blank grid. Terrain and Streets are one click away in the switcher inside the map, and Labels can be switched on to overlay place and boundary names on the imagery.',
     },
     {
-      title: 'Drawn routes with bends',
-      text: 'Add vertices to follow a pipeline, track or river alignment. Each leg is sampled independently and the chainage accumulates across vertices, so a route profile reads as one continuous section.',
+      title: 'Draw the line on the map',
+      text: 'Drag a freehand path along the alignment, or click to place vertices, and the line is drawn where you traced it. The map is the main working area with the profile, stations and exports beside it; a strict two-point line and a multi-vertex route are separate modes on the same sampling engine.',
     },
     {
       title: 'Survey sheet ingestion',
@@ -42,16 +43,12 @@ export const terrainContent: ToolPageContent = {
 
   workflow: [
     {
-      title: 'Choose the source of truth',
-      text: 'If the elevations come from a survey, upload them — reduced levels are authoritative. If the question is a reconnaissance one, use the map. Both paths produce identical stations, identical statistics and identical exports.',
+      title: 'Draw on the map, or upload the levels',
+      text: 'The map is the main working area and opens on satellite imagery: drag the line or click vertices, switching to Terrain for contours or Streets for access roads if that reads better. If the elevations come from a survey, switch to Upload instead — reduced levels are authoritative and the instrument uses only your numbers.',
     },
     {
-      title: 'Trace the line',
-      text: 'In map mode, place two points for a straight alignment, or draw a route vertex by vertex. Coordinates can also be typed or pasted directly when the map is unavailable or the line is specified in a table.',
-    },
-    {
-      title: 'Read the profile before the numbers',
-      text: 'Look at the cross-section first: where the summit sits, whether the descent is longer than the climb, and whether any station is an obvious outlier. Then check the station table and the gradient column against it.',
+      title: 'Run it and read the cross-section',
+      text: 'Press run and the ground is sampled along the line: climb, descent, net change, gradients and slope class appear with the chart and the station table. Read the shape first — where the summit sits, whether the descent is longer than the climb — then check individual stations against the table.',
     },
     {
       title: 'Export with the method attached',
@@ -78,7 +75,17 @@ export const terrainContent: ToolPageContent = {
   ],
 
   specs: [
-    { label: 'Input modes', value: 'Two map points · drawn route · CSV / TXT / XLSX' },
+    { label: 'Input modes', value: 'Draw on map (default) · two points · route · CSV / TXT / XLSX' },
+    {
+      label: 'Basemap',
+      value:
+        'Satellite (Esri World Imagery, default) · Terrain · Streets — compact switcher inside the map, Labels overlay on the imagery',
+    },
+    {
+      label: 'Tile caching',
+      value:
+        'Geodesia edge tile cache where a layer is served through it, plus a browser service-worker cache, so repeat views are fast',
+    },
     { label: 'File columns', value: 'chainage + elevation, or latitude + longitude + elevation' },
     { label: 'Distance method', value: 'Inverse geodesic, WGS 84 ellipsoid' },
     { label: 'Sampling', value: 'Fixed spacing along the line, stations capped for legibility' },
@@ -91,7 +98,11 @@ export const terrainContent: ToolPageContent = {
   faqs: [
     {
       q: 'Where does the elevation come from, and how accurate is it?',
-      a: 'In map mode the elevations come from the Geodesia edge elevation service, which returns a global digital elevation model value at each coordinate and falls back to Open-Meteo if the edge service cannot answer. That is a bare-earth surface at a horizontal resolution of tens of metres, so it will not represent a cutting, a bridge deck or a hedge, and it should not be quoted as survey accuracy. The background map is served through the Geodesia edge tile cache — Thunderforest topo styling with data © OpenStreetMap contributors, and automatic fallback providers if the edge service is unreachable — and changing the basemap has no effect on the elevations or the profile. In upload mode the elevations are yours, and the statistics are only as good as the levels in the file.',
+      a: 'In map mode the elevations come from the Geodesia edge elevation service, which returns a global digital elevation model value at each coordinate and falls back to Open-Meteo if the edge service cannot answer. That is a bare-earth surface at a horizontal resolution of tens of metres, so it will not represent a cutting, a bridge deck or a hedge, and it should not be quoted as survey accuracy. The background map is cartography, not measurement: it opens on satellite imagery (Esri World Imagery), with Terrain and Streets in the switcher inside the map and Labels optionally overlaid on the imagery, and changing the basemap has no effect on the elevations or the profile. In upload mode the elevations are yours, and the statistics are only as good as the levels in the file.',
+    },
+    {
+      q: 'Which basemap should I use, and are the tiles cached?',
+      a: 'Satellite is the default because plot boundaries, field edges, fences and tracks are visible on it at zoom 17–19, which is what most route and alignment questions need. Terrain adds shading and contours when you are judging relief; Streets is cleaner for wayfinding and access roads. Labels draws place and boundary names over the imagery and can be switched off when it clutters a plot. Tiles are cached at the Geodesia edge where a layer is served through it, and every tile the map has shown is also kept by a service worker in a bounded cache on your device, so a repeat visit to the same area loads quickly and sends little or no tile traffic. Elevation values themselves are not cached that way and still need a connection.',
     },
     {
       q: 'Why is the line on the map slightly curved?',
@@ -120,5 +131,5 @@ export const terrainContent: ToolPageContent = {
   ],
 
   closing:
-    'A profile is a claim about the ground, so the instrument is built to show its working: the station table is the evidence, the method statement is the reasoning, and the export carries both with a timestamp. If an elevation looks wrong, the sample is visible and can be corrected or replaced — which is the only defensible way for a browser tool to present terrain data.',
+    'A profile is a claim about the ground, so the instrument is built to show its working: the station table is the evidence, the method statement is the reasoning, and the export carries both with a timestamp. The basemap is cartography — cached for speed, never the source of the numbers. If an elevation looks wrong, the sample is visible and can be corrected or replaced — which is the only defensible way for a browser tool to present terrain data.',
 };

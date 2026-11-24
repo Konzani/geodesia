@@ -70,9 +70,9 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     name: 'Terrain Profile',
     shortName: 'Profile',
     eyebrow: 'Instrument 01 · Elevation',
-    metaTitle: 'Terrain Profile Generator — Elevation Cross-Sections | Geodesia',
+    metaTitle: 'Terrain Profile Generator — Draw on a Satellite Map | Geodesia',
     metaDescription:
-      'Generate an elevation cross-section from a map line, drawn route or CSV/XLSX. Distance, climb, descent, gradient and slope class, computed in your browser.',
+      'Draw a line on satellite imagery, or switch to Terrain, and get an elevation cross-section with climb, descent, gradient and slope class, in your browser.',
     h1: 'Terrain profile generator for elevation cross-sections',
     lede:
       'Pick two points on the map, draw a route, or load a survey sheet — Geodesia samples the ground along your line and returns a cross-section with climb, descent, gradient and slope classification. Every figure is traceable to a station in the table.',
@@ -94,9 +94,9 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     name: 'Polygon Area & Coordinate Engine',
     shortName: 'Area',
     eyebrow: 'Instrument 02 · Area',
-    metaTitle: 'Polygon Area Calculator — UTM, X/Y or Lat/Long | Geodesia',
+    metaTitle: 'Polygon Area Calculator — Area on a Satellite Map | Geodesia',
     metaDescription:
-      'Compute land area from UTM eastings and northings, local X/Y metres, or WGS 84 lat/long in decimal or DMS — grid, geodesic and ground areas with closure.',
+      'Draw or paste a boundary on satellite imagery: grid, geodesic and ground area from UTM, X/Y or lat/long, with closure and per-leg checks, in your browser.',
     h1: 'Parcel area from UTM, local grid or geographic coordinates',
     lede:
       'Paste the boundary exactly as it came off the instrument — UTM eastings and northings, a local X/Y grid, or WGS 84 latitude and longitude in decimal or DMS — and Geodesia returns the grid, geodesic and ground areas with every leg checked.',
@@ -251,7 +251,8 @@ export const ENGINE = {
   distanceMethods:
     'Inverse geodesic on WGS 84 for the ellipsoidal surface; planar distance and grid bearing on projected UTM or X/Y coordinates',
   runtime: 'Browser (client-side; no data leaves the device)',
-  basemap: 'Geodesia edge tile cache (Thunderforest topo over OpenStreetMap data) with Esri / CARTO / OSM fallbacks',
+  basemap:
+    'Three cached raster layers, each with its own ordered fallback chain: Satellite (Esri World Imagery, default, with an optional place and boundary label overlay), Terrain (Thunderforest styling over OpenStreetMap data via the Geodesia edge, then Esri World Topographic, OpenTopoMap and OSM) and Streets (CARTO Voyager, then OSM); tiles are cached at the Geodesia edge where they pass through it and again in the browser by a service worker',
   exports: ['CSV', 'JSON (schema geodesia.report/v1)', 'PDF field report (pdf-lib)'],
 } as const;
 

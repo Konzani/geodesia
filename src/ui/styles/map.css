@@ -1,0 +1,183 @@
+﻿/* ==========================================================================
+   GEODESIA Ã¢â‚¬â€ MAP SHELL
+   --------------------------------------------------------------------------
+   Styles for the map chrome that belongs to `MapCanvas` itself: the basemap
+   switcher dock, its hint line, the retry button and the minimum box the map
+   needs to be usable. Layout (how big the map stage is on a page) belongs to
+   `tools.css`; this file only guarantees the shell is a positioned box that
+   fills its parent.
+
+   Imported statically from `MapCanvas.tsx`, so Astro inlines it at build time
+   Ã¢â‚¬â€ no runtime stylesheet request, no preload gap.
+   ========================================================================== */
+
+.map-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--bw-1) solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-map, var(--bg-sunken));
+}
+
+.map-shell[data-map-ready='true'] {
+  background: var(--bg-map, var(--bg-sunken));
+}
+
+/* ------------------------------------------------------- basemap switcher */
+
+.map-dock {
+  position: absolute;
+  left: var(--s-3);
+  bottom: var(--s-3);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: min(78%, 30rem);
+  pointer-events: none;
+}
+
+.basemap-switch {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 2px;
+  border: var(--bw-1) solid var(--line-strong);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 8%);
+  pointer-events: auto;
+}
+
+.map-dock__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.map-action {
+  appearance: none;
+  margin: 0;
+  padding: 0.34rem 0.55rem;
+  border: var(--bw-1) solid var(--line-strong);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs, 11px);
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.map-action:hover:not(:disabled) {
+  background: var(--bg-sunken);
+}
+
+.map-action:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.map-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.basemap-switch__btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0.3rem 0.55rem;
+  border-radius: calc(var(--r-xs) - 1px);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs, 11px);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.basemap-switch__btn:hover {
+  background: var(--bg-map, var(--bg-sunken));
+}
+
+.basemap-switch__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.basemap-switch__btn[aria-pressed='true'] {
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
+.basemap-switch__btn--labels[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--fg-inverse);
+}
+
+.basemap-switch__btn--labels {
+  border-left: var(--bw-1) solid var(--line-strong);
+}
+
+/* Hint line under the switcher; hidden on small screens to keep the map open. */
+.basemap-hint {
+  margin: 0;
+  max-width: 30rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-raised) 90%, transparent);
+  color: var(--fg-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs, 11px);
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ retry button */
+
+.map-fallback__panel .btn {
+  margin-top: var(--s-2);
+}
+
+@media (max-width: 600px) {
+  .map-dock {
+    left: var(--s-2);
+    bottom: var(--s-2);
+    max-width: calc(100% - var(--s-4));
+  }
+
+  .basemap-hint {
+    display: none;
+  }
+}
+
+/* Transient loading state: top-centre so it never covers the caller's HUD
+   (tool.hint at top-left) or the basemap status pill (top-right). */
+.map-overlay--tc {
+  top: var(--s-3);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  bottom: auto;
+}
+
+.map-overlay--tc .map-hud {
+  padding: 0.3rem 0.6rem;
+  border: var(--bw-1) solid var(--line-strong);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs, 11px);
+  color: var(--fg-muted);
+}

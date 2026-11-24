@@ -1,4 +1,4 @@
-# Geodesia lives at https://geodesia.online — all crawlers welcome.
+# Geodesia lives at https://geodesia.online - all crawlers welcome.
 User-agent: *
 Allow: /
 

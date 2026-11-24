@@ -1,5 +1,5 @@
 /**
- * GEODESIA — Polygon Area instrument (legacy methodology, v2 contract).
+ * GEODESIA â€” Polygon Area instrument (legacy methodology, v2 contract).
  *
  * Three reference systems: local X/Y (grid only), UTM E/N (grid + geodesic +
  * ground) and WGS 84 lon/lat (auto-projected grid + geodesic + ground). The
@@ -123,9 +123,9 @@ const SAMPLES: Record<PolygonMode, ReadonlyArray<readonly [string, string]>> = {
 };
 
 const MODE_HINTS: Record<PolygonMode, string> = {
-  xy: 'Local Cartesian metres (arbitrary origin). Planar shoelace area and perimeter only — no map, no geodesic reference.',
-  utm: 'WGS 84 / UTM grid coordinates. Enter E, N and the zone + hemisphere; grid results are planar, with optional geodesic and ground surfaces.',
-  latlon: 'WGS 84 geographic degrees in Lon, Lat order (decimal or DMS). Click the map to add vertices; the UTM zone is derived automatically from the centroid.',
+  latlon: 'Click the map to add corners â€” the simplest way for most parcels. The UTM zone is derived from the centroid automatically.',
+  utm: 'Enter E, N grid coordinates in metres plus the zone and hemisphere. The map is a spatial check; grid results are planar.',
+  xy: 'Local X/Y in metres with an arbitrary origin. Plan area and perimeter only â€” no map, no geographic reference.',
 };
 
 function parseNumeric(value: string): number | null {
@@ -179,7 +179,7 @@ function parseRows(rows: ReadonlyArray<VertexRow>, mode: PolygonMode): ParsedSta
 }
 
 function formatBearing(value: number | null): string {
-  return value === null || !Number.isFinite(value) ? '—' : fmtNumber(((value % 360) + 360) % 360, 2);
+  return value === null || !Number.isFinite(value) ? 'â€”' : fmtNumber(((value % 360) + 360) % 360, 2);
 }
 
 /** Hectare/acre companions for an area, via the shared unit conversions. */
@@ -188,6 +188,22 @@ function areaBreakdown(area: number): { ha: number; acres: number } {
     ha: convertArea(area, 'm2', 'ha'),
     acres: convertArea(area, 'm2', 'acres'),
   };
+}
+
+/** A full-size football pitch: 105 m Ã— 68 m = 7,140 mÂ² (a familiar yardstick). */
+const FOOTBALL_PITCH_M2 = 105 * 68;
+
+/** Plain-language headline shown above the technical tables. */
+function polygonSentence(areaM2: number): string {
+  const hectares = areaM2 / 10000;
+  const pitches = areaM2 / FOOTBALL_PITCH_M2;
+  if (pitches >= 1) {
+    return `Your parcel is ${fmtNumber(hectares, 2)} ha â€” about ${fmtNumber(pitches, 1)} football pitches.`;
+  }
+  if (pitches >= 0.15) {
+    return `Your parcel is ${fmtNumber(areaM2, 0)} mÂ² â€” about ${fmtNumber(pitches * 100, 0)}% of a football pitch.`;
+  }
+  return `Your parcel is ${fmtNumber(areaM2, 0)} mÂ² â€” smaller than a football pitch.`;
 }
 
 /**
@@ -221,7 +237,7 @@ function pickVertexColumns(headers: ReadonlyArray<string>, mode: PolygonMode): {
 
 export default function PolygonTool() {
   /* --------------------------------------------------------------- input */
-  const [mode, setMode] = useState<PolygonMode>('xy');
+  const [mode, setMode] = useState<PolygonMode>('latlon');
   const [rows, setRows] = useState<VertexRow[]>([]);
   const [pasteText, setPasteText] = useState('');
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -423,7 +439,7 @@ export default function PolygonTool() {
         setResult(computed);
         setDirty(false);
         setStatusMessage(
-          `Computed ${fmtNumber(computed.vertexCount, 0)} vertices · grid area ${fmtNumber(computed.grid.area, 2)} m².`,
+          `Computed ${fmtNumber(computed.vertexCount, 0)} vertices Â· grid area ${fmtNumber(computed.grid.area, 2)} mÂ².`,
         );
         const geo = computed.vertices
           .map((vertex) => vertex.geo)
@@ -456,7 +472,7 @@ export default function PolygonTool() {
 
   const removeRow = (id: string) => {
     setRows((previous) => previous.filter((row) => row.id !== id));
-    setStatusMessage('Vertex removed — the ring re-closes automatically.');
+    setStatusMessage('Vertex removed â€” the ring re-closes automatically.');
   };
 
   const moveRow = (index: number, direction: -1 | 1) => {
@@ -481,7 +497,7 @@ export default function PolygonTool() {
 
   const swapColumns = () => {
     setRows((previous) => previous.map((row) => ({ ...row, a: row.b, b: row.a })));
-    setStatusMessage('Columns swapped — now in Lon, Lat order.');
+    setStatusMessage('Columns swapped â€” now in Lon, Lat order.');
   };
 
   const loadSample = () => {
@@ -548,7 +564,7 @@ export default function PolygonTool() {
       parseVertexValue(String(headers[1] ?? ''), mode) !== null;
     if (headerLooksNumeric) {
       throw new Error(
-        'Add a header row naming the coordinate columns (e.g. X,Y · E,N · Lon,Lat), then re-import.',
+        'Add a header row naming the coordinate columns (e.g. X,Y Â· E,N Â· Lon,Lat), then re-import.',
       );
     }
     const { a: aKey, b: bKey } = pickVertexColumns(headers, mode);
@@ -586,7 +602,7 @@ export default function PolygonTool() {
     setImportError(null);
     setImportWarning(
       skipped.length > 0
-        ? `${fmtNumber(skipped.length, 0)} row${skipped.length === 1 ? '' : 's'} skipped (line ${skipped.slice(0, 4).join(', ')}${skipped.length > 4 ? '…' : ''}).`
+        ? `${fmtNumber(skipped.length, 0)} row${skipped.length === 1 ? '' : 's'} skipped (line ${skipped.slice(0, 4).join(', ')}${skipped.length > 4 ? 'â€¦' : ''}).`
         : null,
     );
     setStatusMessage(`Imported ${fmtNumber(next.length, 0)} vertices from ${fileName}.`);
@@ -639,10 +655,10 @@ export default function PolygonTool() {
     setPasteError(null);
     setStatusMessage(
       next === 'utm'
-        ? 'Reference system changed — existing values are now read as E, N; confirm the zone and hemisphere.'
+        ? 'Reference system changed â€” existing values are now read as E, N; confirm the zone and hemisphere.'
         : next === 'xy'
-          ? 'Reference system changed — existing values are now read as local X, Y (metres).'
-          : 'Reference system changed — existing values are now read as Lon, Lat; invalid rows are flagged.',
+          ? 'Reference system changed â€” existing values are now read as local X, Y (metres).'
+          : 'Reference system changed â€” existing values are now read as Lon, Lat; invalid rows are flagged.',
     );
     lastFitKeyRef.current = '';
   };
@@ -654,7 +670,7 @@ export default function PolygonTool() {
     const next = [...rows, row];
     setRows(next);
     if (next.length >= 3) void runCompute(next);
-    setStatusMessage(`Vertex added from the map — ${fmtNumber(next.length, 0)} in the ring.`);
+    setStatusMessage(`Vertex added from the map â€” ${fmtNumber(next.length, 0)} in the ring.`);
   };
 
   const handleMapReady = useCallback((api: MapCanvasApi) => {
@@ -686,9 +702,9 @@ export default function PolygonTool() {
       leg: String(index + 1).padStart(2, '0'),
       from: `P${fmtNumber(index + 1, 0)}`,
       to: `P${fmtNumber(((index + 1) % result.vertexCount) + 1, 0)}`,
-      grid: leg.gridDistance === null ? '—' : fmtNumber(leg.gridDistance, 3),
-      geodesic: leg.geodesicDistance === null ? '—' : fmtNumber(leg.geodesicDistance, 3),
-      ground: leg.groundDistance === null ? '—' : fmtNumber(leg.groundDistance, 3),
+      grid: leg.gridDistance === null ? 'â€”' : fmtNumber(leg.gridDistance, 3),
+      geodesic: leg.geodesicDistance === null ? 'â€”' : fmtNumber(leg.geodesicDistance, 3),
+      ground: leg.groundDistance === null ? 'â€”' : fmtNumber(leg.groundDistance, 3),
       gridBearing: formatBearing(leg.gridBearing),
       azimuth: formatBearing(leg.geodesicAzimuth),
     }));
@@ -702,8 +718,8 @@ export default function PolygonTool() {
       { key: 'grid', label: 'Grid dist.', unit: 'm' },
       { key: 'geodesic', label: 'Geodesic', unit: 'm' },
       { key: 'ground', label: 'Ground', unit: 'm' },
-      { key: 'gridBearing', label: 'Grid brg.', unit: '°' },
-      { key: 'azimuth', label: 'Azimuth', unit: '°' },
+      { key: 'gridBearing', label: 'Grid brg.', unit: 'Â°' },
+      { key: 'azimuth', label: 'Azimuth', unit: 'Â°' },
     ],
     [],
   );
@@ -723,9 +739,9 @@ export default function PolygonTool() {
           <Readout
             label="Area"
             value={fmtNumber(surface.area, 2)}
-            unit="m²"
+            unit="mÂ²"
             tone={tone}
-            delta={`${fmtNumber(units.ha, 4)} ha · ${fmtNumber(units.acres, 4)} ac`}
+            delta={`${fmtNumber(units.ha, 4)} ha Â· ${fmtNumber(units.acres, 4)} ac`}
             wide
           />
           <Readout label="Perimeter" value={fmtNumber(surface.perimeter, 3)} unit="m" />
@@ -734,8 +750,8 @@ export default function PolygonTool() {
         </ReadoutGrid>
         {key === 'ground' && result.csf !== null ? (
           <p className="tool-hint">
-            Ground surface = grid ÷ CSF² with CSF {fmtNumber(result.csf, 8)} (projection k{' '}
-            {fmtNumber(result.projectScaleFactor ?? Number.NaN, 8)} × elevation factor{' '}
+            Ground surface = grid Ã· CSFÂ² with CSF {fmtNumber(result.csf, 8)} (projection k{' '}
+            {fmtNumber(result.projectScaleFactor ?? Number.NaN, 8)} Ã— elevation factor{' '}
             {fmtNumber(result.elevationFactor ?? Number.NaN, 8)}).
           </p>
         ) : null}
@@ -748,7 +764,7 @@ export default function PolygonTool() {
     return [
       { label: 'Reference system', value: mode === 'xy' ? 'Local X/Y' : mode === 'utm' ? 'UTM' : 'Geographic (Lon/Lat)' },
       { label: 'Vertices', value: result.vertexCount },
-      { label: 'Ring', value: 'auto-closed (last → first)' },
+      { label: 'Ring', value: 'auto-closed (last â†’ first)' },
       {
         label: 'UTM zone',
         value: result.zone === null ? 'n/a' : `${fmtNumber(result.zone, 0)}${result.hemisphere ?? ''}${result.zoneAuto ? ' (auto)' : ''}`,
@@ -813,12 +829,12 @@ export default function PolygonTool() {
           ],
           rawLegs,
           [
-            'Geodesia — Polygon Area',
+            'Geodesia â€” Polygon Area',
             `Reference system: ${mode === 'xy' ? 'Local X/Y' : mode === 'utm' ? `UTM ${zoneText}${hemisphere}` : `Geographic (auto UTM ${result.zone ?? ''}${result.hemisphere ?? ''})`}`,
-            `Grid area: ${fmtNumber(result.grid.area, 2)} m2 · perimeter ${fmtNumber(result.grid.perimeter, 3)} m`,
-            `Geodesic area: ${result.geodesic ? `${fmtNumber(result.geodesic.area, 2)} m2 · perimeter ${fmtNumber(result.geodesic.perimeter, 3)} m` : 'n/a'}`,
-            `Ground area: ${result.ground ? `${fmtNumber(result.ground.area, 2)} m2 · perimeter ${fmtNumber(result.ground.perimeter, 3)} m` : 'n/a'}`,
-            `CSF: ${result.csf === null ? 'n/a' : fmtNumber(result.csf, 8)} · mean elevation ${fmtNumber(useGround ? meanElevation : 0, 3)} m`,
+            `Grid area: ${fmtNumber(result.grid.area, 2)} m2 Â· perimeter ${fmtNumber(result.grid.perimeter, 3)} m`,
+            `Geodesic area: ${result.geodesic ? `${fmtNumber(result.geodesic.area, 2)} m2 Â· perimeter ${fmtNumber(result.geodesic.perimeter, 3)} m` : 'n/a'}`,
+            `Ground area: ${result.ground ? `${fmtNumber(result.ground.area, 2)} m2 Â· perimeter ${fmtNumber(result.ground.perimeter, 3)} m` : 'n/a'}`,
+            `CSF: ${result.csf === null ? 'n/a' : fmtNumber(result.csf, 8)} Â· mean elevation ${fmtNumber(useGround ? meanElevation : 0, 3)} m`,
             `Generated: ${timestamp()}`,
           ],
         );
@@ -830,7 +846,7 @@ export default function PolygonTool() {
               tool: 'Polygon Area',
               title: 'Parcel area and closure report (grid / geodesic / ground)',
               method:
-                'Gaussian shoelace on projected UTM grid coordinates; Karney ellipsoidal geodesic area/perimeter on WGS 84; ground surface via combined scale factor (k · EF)',
+                'Gaussian shoelace on projected UTM grid coordinates; Karney ellipsoidal geodesic area/perimeter on WGS 84; ground surface via combined scale factor (k Â· EF)',
               parameters: Object.fromEntries(parameters().map((entry) => [entry.label, entry.value])),
               notes: [...result.warnings],
             },
@@ -845,12 +861,12 @@ export default function PolygonTool() {
           meta: {
             tool: 'Polygon Area',
             title: 'Parcel area and closure report',
-            subtitle: `${fmtNumber(result.vertexCount, 0)} vertices · ${mode === 'xy' ? 'Local X/Y grid' : mode === 'utm' ? `UTM ${zoneText}${hemisphere}` : 'Geographic (auto UTM)'}`,
+            subtitle: `${fmtNumber(result.vertexCount, 0)} vertices Â· ${mode === 'xy' ? 'Local X/Y grid' : mode === 'utm' ? `UTM ${zoneText}${hemisphere}` : 'Geographic (auto UTM)'}`,
             parameters: parameters(),
             notes: [
               'Grid area uses the Gaussian shoelace on projected coordinates (ring translated to its first vertex).',
               'Geodesic area/perimeter use the WGS 84 ellipsoid (Karney), never a sphere approximation.',
-              'Ground distance = grid distance ÷ CSF; ground area = grid area ÷ CSF².',
+              'Ground distance = grid distance Ã· CSF; ground area = grid area Ã· CSFÂ².',
               ...result.warnings,
             ],
           },
@@ -859,7 +875,7 @@ export default function PolygonTool() {
               kind: 'kv',
               heading: 'Grid surface',
               rows: [
-                { label: 'Grid area', value: `${fmtNumber(result.grid.area, 2)} m²`, emphasis: true },
+                { label: 'Grid area', value: `${fmtNumber(result.grid.area, 2)} mÂ²`, emphasis: true },
                 { label: 'Grid perimeter', value: `${fmtNumber(result.grid.perimeter, 3)} m` },
                 { label: 'Hectares', value: `${fmtNumber(areaBreakdown(result.grid.area).ha, 4)} ha` },
                 { label: 'Acres', value: `${fmtNumber(areaBreakdown(result.grid.area).acres, 4)} ac` },
@@ -870,7 +886,7 @@ export default function PolygonTool() {
                       ? 'n/a'
                       : `${fmtNumber(result.zone, 0)}${result.hemisphere ?? ''}${result.zoneAuto ? ' (auto from centroid)' : ''}`,
                 },
-                { label: 'Closure (last → first)', value: `${fmtNumber(result.closure, 3)} m` },
+                { label: 'Closure (last â†’ first)', value: `${fmtNumber(result.closure, 3)} m` },
               ],
             },
             ...(result.geodesic
@@ -879,7 +895,7 @@ export default function PolygonTool() {
                     kind: 'kv' as const,
                     heading: 'Geodesic surface (WGS 84)',
                     rows: [
-                      { label: 'Geodesic area', value: `${fmtNumber(result.geodesic.area, 2)} m²`, emphasis: true },
+                      { label: 'Geodesic area', value: `${fmtNumber(result.geodesic.area, 2)} mÂ²`, emphasis: true },
                       { label: 'Geodesic perimeter', value: `${fmtNumber(result.geodesic.perimeter, 3)} m` },
                     ],
                   },
@@ -891,7 +907,7 @@ export default function PolygonTool() {
                     kind: 'kv' as const,
                     heading: 'Ground surface (CSF)',
                     rows: [
-                      { label: 'Ground area', value: `${fmtNumber(result.ground.area, 2)} m²`, emphasis: true },
+                      { label: 'Ground area', value: `${fmtNumber(result.ground.area, 2)} mÂ²`, emphasis: true },
                       { label: 'Ground perimeter', value: `${fmtNumber(result.ground.perimeter, 3)} m` },
                       { label: 'Combined scale factor', value: fmtNumber(result.csf ?? Number.NaN, 8) },
                       { label: 'Projection scale factor k', value: fmtNumber(result.projectScaleFactor ?? Number.NaN, 8) },
@@ -924,7 +940,7 @@ export default function PolygonTool() {
                 row.gridBearing,
                 row.azimuth,
               ]),
-              footnote: `Totals · grid ${fmtNumber(result.grid.perimeter, 3)} m · geodesic ${result.geodesic ? `${fmtNumber(result.geodesic.perimeter, 3)} m` : 'n/a'} · ground ${result.ground ? `${fmtNumber(result.ground.perimeter, 3)} m` : 'n/a'}`,
+              footnote: `Totals Â· grid ${fmtNumber(result.grid.perimeter, 3)} m Â· geodesic ${result.geodesic ? `${fmtNumber(result.geodesic.perimeter, 3)} m` : 'n/a'} Â· ground ${result.ground ? `${fmtNumber(result.ground.perimeter, 3)} m` : 'n/a'}`,
             },
           ],
         };
@@ -966,515 +982,602 @@ export default function PolygonTool() {
       ? `${fmtNumber(autoZone.zone, 0)}${autoZone.hemisphere} auto`
       : 'n/a';
 
+  /* Headline surface: the plain-language sentence leads with the geodesic area
+     when it exists (WGS 84 is what most clients mean by "the area"), then the
+     ground surface, then the planar grid. */
+  const headline = result === null ? null : (result.geodesic ?? result.ground ?? result.grid);
+  const headlineLabel = result?.geodesic ? 'geodesic' : result?.ground ? 'ground' : 'grid';
+
   return (
-    <div className="tool">
+    <div className="tool-page">
       <p className="sr-only" aria-live="polite">
         {statusMessage}
       </p>
 
-      {/* ------------------------------------------------------------- aside */}
-      <div className="tool__aside">
-        <Panel title="Reference system" tight>
-          <Segmented options={modeOptions} value={mode} onChange={switchMode} label="Reference system" />
-          <p className="tool-hint">{MODE_HINTS[mode]}</p>
-          {mode === 'utm' ? (
-            <div className="field-row">
-              <Field label="UTM zone" htmlFor={zoneId} hint="1–60">
-                <input
-                  id={zoneId}
-                  className="input"
-                  type="number"
-                  min={1}
-                  max={60}
-                  step={1}
-                  value={zoneText}
-                  aria-invalid={(mode === 'utm' && zoneNumber === null) || undefined}
-                  onChange={(event) => setZoneText(event.target.value)}
-                />
-              </Field>
-              <Field label="Hemisphere" htmlFor={hemiId}>
-                <select
-                  id={hemiId}
-                  className="select"
-                  value={hemisphere}
-                  onChange={(event) => setHemisphere(event.target.value === 'N' ? 'N' : 'S')}
-                >
-                  {HEMISPHERES.map((entry) => (
-                    <option key={entry.value} value={entry.value}>
-                      {entry.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          ) : null}
-          {mode === 'latlon' ? (
-            <Readout
-              label="Auto UTM zone"
-              value={zoneLabel}
-              delta="derived from the centroid"
-              tone="default"
-            />
-          ) : null}
-        </Panel>
-
-        <Panel title="Surfaces & scale" tight>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={effectiveGeodesic}
-              disabled={!geographicAvailability}
-              onChange={(event) => setUseGeodesic(event.target.checked)}
-            />
-            <span>
-              Geodesic surface
-              <span className="check__note">WGS 84 ellipsoid area &amp; perimeter</span>
-            </span>
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={effectiveGround}
-              disabled={!geographicAvailability}
-              onChange={(event) => setUseGround(event.target.checked)}
-            />
-            <span>
-              Ground surface (CSF)
-              <span className="check__note">grid ÷ CSF and grid ÷ CSF²</span>
-            </span>
-          </label>
-          {effectiveGround ? (
-            <div className="field-row">
-              <Field
-                label="Mean elevation"
-                htmlFor={meanElevationId}
-                unit="m"
-                hint="Ellipsoidal height used by the elevation factor"
-              >
-                <input
-                  id={meanElevationId}
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  value={meanElevationText}
-                  onChange={(event) => setMeanElevationText(event.target.value)}
-                />
-              </Field>
-              <Field
-                label="CSF override"
-                htmlFor={csfId}
-                unit="optional"
-                hint="User-supplied combined scale factor"
-              >
-                <input
-                  id={csfId}
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  value={csfOverrideText}
-                  placeholder="0.999600"
-                  aria-invalid={csfInvalid || undefined}
-                  onChange={(event) => setCsfOverrideText(event.target.value)}
-                />
-              </Field>
-            </div>
-          ) : null}
-          {csfInvalid ? <Notice tone="err">CSF override must be between 0.5 and 2.</Notice> : null}
-          {!geographicAvailability ? (
-            <Notice tone="info">
-              Local X/Y has no geographic reference, so only the grid surface can be computed.
-            </Notice>
-          ) : null}
-          {result ? (
-            <div className="formula">
-              <p className="formula__name">Combined scale factor</p>
-              <p className="formula__body">
-                CSF = k · EF &nbsp;·&nbsp; k = k₀(1 + x²/2R²) &nbsp;·&nbsp; EF = a/(a+h)
-              </p>
-              <p className="formula__note">
-                k₀ = 0.9996, x = meanE − 500 000 m, R = √(M·N) at the centroid latitude. Ground
-                distance = grid ÷ CSF; ground area = grid ÷ CSF². {result.csf === null ? 'CSF is not applicable for this input.' : `Computed CSF ${fmtNumber(result.csf, 8)}.`}
-              </p>
-            </div>
-          ) : null}
-        </Panel>
-
-        <Panel title="Vertices input" tight>
-          <Field
-            label="Paste coordinates"
-            htmlFor={pasteId}
-            hint={
-              mode === 'xy'
-                ? 'One “X, Y” pair per line (metres)'
-                : mode === 'utm'
-                  ? 'One “E, N” pair per line (metres)'
-                  : 'One “Lon, Lat” pair per line — decimal or DMS'
-            }
-          >
-            <textarea
-              id={pasteId}
-              className="textarea"
-              rows={4}
-              value={pasteText}
-              placeholder={
-                mode === 'xy'
-                  ? '0, 0\n120, 0\n120, 80\n0, 80'
-                  : mode === 'utm'
-                    ? '253000, 9858000\n253120, 9858000\n253120, 9858080'
-                    : '36.8172, -1.2864\n36.8189, -1.2864\n36.8189, -1.2876'
-              }
-              onChange={(event) => setPasteText(event.target.value)}
-            />
-          </Field>
-          {pasteError ? <Notice tone="err">{pasteError}</Notice> : null}
-          <div className="btn-row">
-            <button type="button" className="btn btn--sm" onClick={applyPaste} disabled={!pasteText.trim()}>
-              <IconGrid size={14} /> Load vertices
-            </button>
-            <button type="button" className="btn btn--sm btn--quiet" onClick={loadSample}>
-              Load example
-            </button>
-          </div>
-          <div className="dropzone-wrap">
-            <label
-              className="dropzone dropzone--compact"
-              htmlFor={fileInputId}
-              data-dragging={dragging || undefined}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleVertexDrop}
-            >
-              <IconUpload size={16} />
-              <span className="dropzone__title">
-                {importBusy ? 'Reading vertices…' : 'Drop CSV, TXT or XLSX'}
+      <div className="tool-stage">
+        {/* ------------------------------------------------------- controls */}
+        <div className="tool-stage__side">
+          <section className="step-card" aria-labelledby="polygon-step-1">
+            <div className="step-card__head">
+              <span className="step-card__num" aria-hidden="true">
+                1
               </span>
-              <span className="dropzone__hint">
-                two coordinate columns ·{' '}
-                {mode === 'latlon' ? 'Lon, Lat' : mode === 'utm' ? 'E, N' : 'X, Y'}
-              </span>
-            </label>
-            <input
-              id={fileInputId}
-              type="file"
-              accept=".csv,.txt,.tsv,.xlsx,.xls"
-              className="sr-only"
-              onChange={handleFileInput}
-            />
-          </div>
-          {importedName ? (
-            <p className="tool-hint">
-              Imported <strong>{importedName}</strong> — check the reference system and column order.
-            </p>
-          ) : null}
-          {importWarning ? <Notice tone="warn">{importWarning}</Notice> : null}
-          {importError ? <Notice tone="err">{importError}</Notice> : null}
-        </Panel>
-
-        <Panel
-          title="Compute"
-          meta={dirty && result ? 'inputs changed' : result ? 'up to date' : 'not computed'}
-          tight
-          footer={
-            <span className="panel__meta">
-              Zone {zoneLabel} · {fmtNumber(rows.length, 0)} vertices
-            </span>
-          }
-        >
-          {computeError ? <Notice tone="err">{computeError}</Notice> : null}
-          {validationIssues.length > 0 ? (
-            <Notice tone="err" title="Validation failed">
-              <ul className="issue-list">
-                {validationIssues.map((issue, index) => (
-                  <li key={`issue-${index}`}>{issue}</li>
-                ))}
-              </ul>
-            </Notice>
-          ) : null}
-          {dirty && result ? (
-            <Notice tone="info">Inputs changed — run the computation again to refresh the results.</Notice>
-          ) : null}
-          <button
-            type="button"
-            className="btn btn--primary btn--block"
-            onClick={() => void runCompute()}
-            disabled={computing}
-          >
-            <IconCrosshair size={15} /> {computing ? 'Computing…' : 'Execute computation'}
-          </button>
-          {basemap ? (
-            <p className="tool-hint">
-              Basemap: {basemap.label}
-              {basemap.status === 'failed'
-                ? ' — map unavailable, coordinate entry and tables still work.'
-                : basemap.status === 'fallback'
-                  ? ' (fallback source)'
-                  : ''}
-            </p>
-          ) : null}
-        </Panel>
-      </div>
-
-      {/* -------------------------------------------------------------- main */}
-      <div className="tool__main">
-        {mode !== 'latlon' ? (
-          <Panel
-            title={mode === 'xy' ? 'Coordinate sheet' : 'Grid coordinate sheet'}
-            meta={mode === 'xy' ? 'local X/Y · metres' : `UTM ${zoneText}${hemisphere} · metres`}
-            tight
-          >
-            <PlotSurface
-              vertices={plotVertices.map((vertex, index) => ({ ...vertex, label: fmtNumber(index + 1, 0) }))}
-              centroid={centroidGrid ? { x: centroidGrid.E, y: centroidGrid.N } : null}
-              legDistances={plotLegDistances}
-              areaM2={result?.grid.area ?? null}
-              perimeterM={result?.grid.perimeter ?? null}
-              axisLabels={mode === 'xy' ? { x: 'X (m)', y: 'Y (m)' } : { x: 'E (m)', y: 'N (m)' }}
-              northLabel={mode === 'xy' ? 'Y' : 'N'}
-              title={mode === 'xy' ? 'Local grid plot' : 'UTM grid plot'}
-            />
-          </Panel>
-        ) : null}
-
-        {mode !== 'xy' ? (
-          <Panel
-            title={mode === 'latlon' ? 'Parcel map' : 'Map overlay'}
-            meta={
-              mode === 'latlon'
-                ? `${fmtNumber(geoPoints.length, 0)} vertices · click map to add`
-                : 'grid ring projected to WGS 84'
-            }
-            actions={
-              <Toolbar label="Map actions">
-                <button
-                  type="button"
-                  className="btn btn--sm btn--quiet"
-                  onClick={fitMap}
-                  disabled={geoPoints.length === 0}
-                >
-                  Fit
-                </button>
-              </Toolbar>
-            }
-            tight
-          >
-            <MapCanvas
-              mode={mode === 'latlon' ? 'polygon' : 'view'}
-              center={MAP_DEFAULT_VIEW.center}
-              zoom={MAP_DEFAULT_VIEW.zoom}
-              markers={mapMarkers}
-              polygon={mapPolygon}
-              line={mapLine}
-              onMapClick={mode === 'latlon' ? handleMapClick : undefined}
-              onMapError={setMapError}
-              onBasemapChange={handleBasemap}
-              onReady={handleMapReady}
-              ariaLabel={
-                mode === 'latlon'
-                  ? 'Parcel map: click to add vertices in ring order'
-                  : 'UTM parcel overlay map'
-              }
-            >
-              <div className="map-overlay map-overlay--bl">
-                <p className="map-hint">
-                  {mode === 'latlon' ? (
-                    <>
-                      <strong>Click the map to add vertices</strong> in ring order (Lon, Lat is written
-                      to the table). The ring closes automatically from the last vertex to the first.
-                    </>
-                  ) : (
-                    <>
-                      <strong>Grid ring projected to lon/lat</strong> with the entered zone and
-                      hemisphere. Edit E/N in the table or paste; the map is a spatial check, not an
-                      input.
-                    </>
-                  )}
-                </p>
-              </div>
-            </MapCanvas>
-            {mapError ? (
-              <Notice tone="warn" title="Map unavailable">
-                {mapError} The white coordinate sheet and the vertex table still work — the parcel can
-                be entered, computed and exported without the basemap.
-              </Notice>
-            ) : null}
-            {mode === 'utm' && utmEngineReady && geoPoints.length === 0 && parsed.points.length > 0 ? (
-              <Notice tone="warn">
-                The ring could not be projected for the map overlay. Check the UTM zone and hemisphere
-                — grid results are unaffected.
-              </Notice>
-            ) : null}
-            {utmEngineError ? (
-              <Notice tone="warn" title="Projection engine unavailable">
-                {utmEngineError} Grid results for UTM and geographic input need this engine; the
-                values already computed remain valid, and a reload retries the download.
-              </Notice>
-            ) : null}
-          </Panel>
-        ) : null}
-
-        <Panel
-          title="Vertices"
-          meta={`${fmtNumber(rows.length, 0)} vertices · auto-closed`}
-          actions={
-            <Toolbar label="Vertex row actions">
-              <button type="button" className="btn btn--sm" onClick={addRow}>
-                <IconPlus size={14} /> Add vertex
-              </button>
-              <button type="button" className="btn btn--sm btn--quiet" onClick={clearRows} disabled={rows.length === 0}>
-                <IconTrash size={14} /> Clear
-              </button>
-            </Toolbar>
-          }
-          tight
-        >
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={<IconPolygon size={22} />}
-              title="No vertices yet"
-              action={
-                <div className="btn-row">
-                  <button type="button" className="btn btn--sm btn--primary" onClick={addRow}>
-                    <IconPlus size={14} /> Add first vertex
-                  </button>
-                  <button type="button" className="btn btn--sm" onClick={loadSample}>
-                    Load example parcel
-                  </button>
+              <h3 className="step-card__title" id="polygon-step-1">
+                Pick your corners
+              </h3>
+            </div>
+            <div className="step-card__body">
+              <Segmented
+                options={modeOptions}
+                value={mode}
+                onChange={switchMode}
+                label="Reference system"
+                className="segmented--full"
+              />
+              <p className="tool-hint">{MODE_HINTS[mode]}</p>
+              {mode === 'utm' ? (
+                <div className="field-row">
+                  <Field label="UTM zone" htmlFor={zoneId} hint="1â€“60">
+                    <input
+                      id={zoneId}
+                      className="input"
+                      type="number"
+                      min={1}
+                      max={60}
+                      step={1}
+                      value={zoneText}
+                      aria-invalid={(mode === 'utm' && zoneNumber === null) || undefined}
+                      onChange={(event) => setZoneText(event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Hemisphere" htmlFor={hemiId}>
+                    <select
+                      id={hemiId}
+                      className="select"
+                      value={hemisphere}
+                      onChange={(event) => setHemisphere(event.target.value === 'N' ? 'N' : 'S')}
+                    >
+                      {HEMISPHERES.map((entry) => (
+                        <option key={entry.value} value={entry.value}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
                 </div>
-              }
-            >
-              {mode === 'latlon'
-                ? 'Click the map to add vertices, paste a Lon, Lat list, or add rows manually.'
-                : 'Add rows manually or paste a coordinate list in the expected column order.'}
-            </EmptyState>
-          ) : (
-            <>
+              ) : null}
+              {mode === 'latlon' ? (
+                <p className="tool-hint">
+                  Map clicks write <strong>Lon, Lat</strong> corners. Auto UTM zone: {zoneLabel}.
+                </p>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="step-card" aria-labelledby="polygon-step-2">
+            <div className="step-card__head">
+              <span className="step-card__num" aria-hidden="true">
+                2
+              </span>
+              <h3 className="step-card__title" id="polygon-step-2">
+                Check the shape
+              </h3>
+              <span className="step-card__status">
+                {fmtNumber(rows.length, 0)} {rows.length === 1 ? 'corner' : 'corners'}
+              </span>
+            </div>
+            <div className="step-card__body">
+              <p className="tool-hint">
+                The ring closes automatically from the last corner back to the first â€” do not repeat the
+                first corner. Current order:{' '}
+                {mode === 'xy' ? 'X, Y' : mode === 'utm' ? 'E, N' : 'Lon, Lat'}.
+              </p>
               {invalidCount > 0 ? (
                 <Notice tone="warn">
                   {fmtNumber(invalidCount, 0)} row{invalidCount === 1 ? '' : 's'} cannot be read yet.
-                  Complete or remove {invalidCount === 1 ? 'it' : 'them'} to compute results.
+                  Complete or remove {invalidCount === 1 ? 'it' : 'them'} to calculate.
                 </Notice>
               ) : null}
               {mode === 'latlon' && parsed.swapSuspected ? (
                 <Notice
                   tone={parsed.swapSuspected === 'strong' ? 'err' : 'warn'}
-                  title={parsed.swapSuspected === 'strong' ? 'Columns look swapped' : 'Check column order'}
+                  title={parsed.swapSuspected === 'strong' ? 'Corners look swapped' : 'Check the corner order'}
                   action={
                     <button type="button" className="btn btn--sm" onClick={swapColumns}>
                       Swap to Lon, Lat
                     </button>
                   }
                 >
-                  This calculator expects <strong>Lon, Lat</strong> order. These values look like
-                  Lat, Lon — if the map or results are displaced, swap the columns.
+                  This instrument expects <strong>Lon, Lat</strong> order. These values look like Lat,
+                  Lon â€” if the map or results are displaced, swap the columns.
                 </Notice>
               ) : null}
-              <div className="vertex-table-wrap">
-                <table className="data-table vertex-table">
-                  <caption className="sr-only">Polygon vertices, editable</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col" className="is-left">
-                        #
-                      </th>
-                      <th scope="col">
-                        {mode === 'xy' ? 'X (m)' : mode === 'utm' ? 'E (m)' : 'Longitude'}
-                      </th>
-                      <th scope="col">
-                        {mode === 'xy' ? 'Y (m)' : mode === 'utm' ? 'N (m)' : 'Latitude'}
-                      </th>
-                      <th scope="col" className="is-left">
-                        <span className="sr-only">Row actions</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, index) => {
-                      const invalid = parsed.invalidRows.includes(index);
-                      const aValue = parseVertexValue(row.a, mode);
-                      const bValue = parseVertexValue(row.b, mode);
-                      return (
-                        <tr key={row.id}>
-                          <td className="is-left vertex-table__index">{fmtNumber(index + 1, 0)}</td>
-                          <td>
-                            <input
-                              className="input input--cell"
-                              value={row.a}
-                              inputMode="decimal"
-                              aria-label={`Vertex ${index + 1} ${
-                                mode === 'xy' ? 'X' : mode === 'utm' ? 'E' : 'longitude'
-                              }`}
-                              aria-invalid={invalid || undefined}
-                              placeholder={
-                                mode === 'xy' ? '0.000' : mode === 'utm' ? '253000' : '36.817200'
-                              }
-                              onChange={(event) => updateRow(row.id, 'a', event.target.value)}
-                            />
-                            {mode === 'latlon' && aValue !== null && Math.abs(aValue) <= 180 ? (
-                              <span className="vertex-table__dms">{formatDMS(aValue, 2, 'lon')}</span>
-                            ) : null}
-                          </td>
-                          <td>
-                            <input
-                              className="input input--cell"
-                              value={row.b}
-                              inputMode="decimal"
-                              aria-label={`Vertex ${index + 1} ${
-                                mode === 'xy' ? 'Y' : mode === 'utm' ? 'N' : 'latitude'
-                              }`}
-                              aria-invalid={invalid || undefined}
-                              placeholder={
-                                mode === 'xy' ? '0.000' : mode === 'utm' ? '9858000' : '-1.286400'
-                              }
-                              onChange={(event) => updateRow(row.id, 'b', event.target.value)}
-                            />
-                            {mode === 'latlon' && bValue !== null && Math.abs(bValue) <= 90 ? (
-                              <span className="vertex-table__dms">{formatDMS(bValue, 2, 'lat')}</span>
-                            ) : null}
-                          </td>
-                          <td className="is-left vertex-table__actions">
-                            <button
-                              type="button"
-                              className="icon-btn icon-btn--xs"
-                              onClick={() => moveRow(index, -1)}
-                              disabled={index === 0}
-                              aria-label={`Move vertex ${index + 1} up`}
-                            >
-                              <IconArrowUp size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              className="icon-btn icon-btn--xs"
-                              onClick={() => moveRow(index, 1)}
-                              disabled={index === rows.length - 1}
-                              aria-label={`Move vertex ${index + 1} down`}
-                            >
-                              <IconArrowDown size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              className="icon-btn icon-btn--xs"
-                              onClick={() => removeRow(row.id)}
-                              aria-label={`Remove vertex ${index + 1}`}
-                            >
-                              <IconTrash size={13} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              {computeError ? <Notice tone="err">{computeError}</Notice> : null}
+              {validationIssues.length > 0 ? (
+                <Notice tone="err" title="Check the corners">
+                  <ul className="issue-list">
+                    {validationIssues.map((issue, index) => (
+                      <li key={`issue-${index}`}>{issue}</li>
+                    ))}
+                  </ul>
+                </Notice>
+              ) : null}
+              {dirty && result ? (
+                <Notice tone="info">Corners changed â€” calculate again to refresh the result.</Notice>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn--primary btn--block"
+                onClick={() => void runCompute()}
+                disabled={computing}
+              >
+                <IconCrosshair size={15} /> {computing ? 'Calculatingâ€¦' : 'Calculate area'}
+              </button>
+
+              <details className="advanced">
+                <summary>Edit corners by hand</summary>
+                <div className="advanced__body">
+                  <div className="btn-row">
+                    <button type="button" className="btn btn--sm" onClick={addRow}>
+                      <IconPlus size={14} /> Add corner
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--quiet"
+                      onClick={clearRows}
+                      disabled={rows.length === 0}
+                    >
+                      <IconTrash size={14} /> Clear all
+                    </button>
+                  </div>
+                  {rows.length === 0 ? (
+                    <p className="tool-hint">
+                      No corners yet â€” click the map, paste a coordinate list, or add rows here.
+                    </p>
+                  ) : (
+                    <div className="vertex-table-wrap">
+                      <table className="data-table vertex-table">
+                        <caption className="sr-only">Polygon vertices, editable</caption>
+                        <thead>
+                          <tr>
+                            <th scope="col" className="is-left">
+                              #
+                            </th>
+                            <th scope="col">
+                              {mode === 'xy' ? 'X (m)' : mode === 'utm' ? 'E (m)' : 'Longitude'}
+                            </th>
+                            <th scope="col">
+                              {mode === 'xy' ? 'Y (m)' : mode === 'utm' ? 'N (m)' : 'Latitude'}
+                            </th>
+                            <th scope="col" className="is-left">
+                              <span className="sr-only">Row actions</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row, index) => {
+                            const invalid = parsed.invalidRows.includes(index);
+                            const aValue = parseVertexValue(row.a, mode);
+                            const bValue = parseVertexValue(row.b, mode);
+                            return (
+                              <tr key={row.id}>
+                                <td className="is-left vertex-table__index">{fmtNumber(index + 1, 0)}</td>
+                                <td>
+                                  <input
+                                    className="input input--cell"
+                                    value={row.a}
+                                    inputMode="decimal"
+                                    aria-label={`Vertex ${index + 1} ${
+                                      mode === 'xy' ? 'X' : mode === 'utm' ? 'E' : 'longitude'
+                                    }`}
+                                    aria-invalid={invalid || undefined}
+                                    placeholder={
+                                      mode === 'xy' ? '0.000' : mode === 'utm' ? '253000' : '36.817200'
+                                    }
+                                    onChange={(event) => updateRow(row.id, 'a', event.target.value)}
+                                  />
+                                  {mode === 'latlon' && aValue !== null && Math.abs(aValue) <= 180 ? (
+                                    <span className="vertex-table__dms">{formatDMS(aValue, 2, 'lon')}</span>
+                                  ) : null}
+                                </td>
+                                <td>
+                                  <input
+                                    className="input input--cell"
+                                    value={row.b}
+                                    inputMode="decimal"
+                                    aria-label={`Vertex ${index + 1} ${
+                                      mode === 'xy' ? 'Y' : mode === 'utm' ? 'N' : 'latitude'
+                                    }`}
+                                    aria-invalid={invalid || undefined}
+                                    placeholder={
+                                      mode === 'xy' ? '0.000' : mode === 'utm' ? '9858000' : '-1.286400'
+                                    }
+                                    onChange={(event) => updateRow(row.id, 'b', event.target.value)}
+                                  />
+                                  {mode === 'latlon' && bValue !== null && Math.abs(bValue) <= 90 ? (
+                                    <span className="vertex-table__dms">{formatDMS(bValue, 2, 'lat')}</span>
+                                  ) : null}
+                                </td>
+                                <td className="is-left vertex-table__actions">
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn--xs"
+                                    onClick={() => moveRow(index, -1)}
+                                    disabled={index === 0}
+                                    aria-label={`Move vertex ${index + 1} up`}
+                                  >
+                                    <IconArrowUp size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn--xs"
+                                    onClick={() => moveRow(index, 1)}
+                                    disabled={index === rows.length - 1}
+                                    aria-label={`Move vertex ${index + 1} down`}
+                                  >
+                                    <IconArrowDown size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn--xs"
+                                    onClick={() => removeRow(row.id)}
+                                    aria-label={`Remove vertex ${index + 1}`}
+                                  >
+                                    <IconTrash size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </details>
+
+              <details className="advanced">
+                <summary>Paste or upload coordinates</summary>
+                <div className="advanced__body">
+                  <Field
+                    label="Paste coordinates"
+                    htmlFor={pasteId}
+                    hint={
+                      mode === 'xy'
+                        ? 'One â€œX, Yâ€ pair per line (metres)'
+                        : mode === 'utm'
+                          ? 'One â€œE, Nâ€ pair per line (metres)'
+                          : 'One â€œLon, Latâ€ pair per line â€” decimal or DMS'
+                    }
+                  >
+                    <textarea
+                      id={pasteId}
+                      className="textarea"
+                      rows={4}
+                      value={pasteText}
+                      placeholder={
+                        mode === 'xy'
+                          ? '0, 0\n120, 0\n120, 80\n0, 80'
+                          : mode === 'utm'
+                            ? '253000, 9858000\n253120, 9858000\n253120, 9858080'
+                            : '36.8172, -1.2864\n36.8189, -1.2864\n36.8189, -1.2876'
+                      }
+                      onChange={(event) => setPasteText(event.target.value)}
+                    />
+                  </Field>
+                  {pasteError ? <Notice tone="err">{pasteError}</Notice> : null}
+                  <div className="btn-row">
+                    <button
+                      type="button"
+                      className="btn btn--sm"
+                      onClick={applyPaste}
+                      disabled={!pasteText.trim()}
+                    >
+                      <IconGrid size={14} /> Load corners
+                    </button>
+                    <button type="button" className="btn btn--sm btn--quiet" onClick={loadSample}>
+                      Load example
+                    </button>
+                  </div>
+                  <div className="dropzone-wrap">
+                    <label
+                      className="dropzone dropzone--compact"
+                      htmlFor={fileInputId}
+                      data-dragging={dragging || undefined}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        setDragging(true);
+                      }}
+                      onDragLeave={() => setDragging(false)}
+                      onDrop={handleVertexDrop}
+                    >
+                      <IconUpload size={16} />
+                      <span className="dropzone__title">
+                        {importBusy ? 'Reading cornersâ€¦' : 'Drop CSV, TXT or XLSX'}
+                      </span>
+                      <span className="dropzone__hint">
+                        two coordinate columns Â·{' '}
+                        {mode === 'latlon' ? 'Lon, Lat' : mode === 'utm' ? 'E, N' : 'X, Y'}
+                      </span>
+                    </label>
+                    <input
+                      id={fileInputId}
+                      type="file"
+                      accept=".csv,.txt,.tsv,.xlsx,.xls"
+                      className="sr-only"
+                      onChange={handleFileInput}
+                    />
+                  </div>
+                  {importedName ? (
+                    <p className="tool-hint">
+                      Imported <strong>{importedName}</strong> â€” check the reference system and column
+                      order.
+                    </p>
+                  ) : null}
+                  {importWarning ? <Notice tone="warn">{importWarning}</Notice> : null}
+                  {importError ? <Notice tone="err">{importError}</Notice> : null}
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <details className="advanced">
+            <summary>Advanced options</summary>
+            <div className="advanced__body">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={effectiveGeodesic}
+                  disabled={!geographicAvailability}
+                  onChange={(event) => setUseGeodesic(event.target.checked)}
+                />
+                <span>
+                  Geodesic surface
+                  <span className="check__note">WGS 84 ellipsoid area &amp; perimeter</span>
+                </span>
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={effectiveGround}
+                  disabled={!geographicAvailability}
+                  onChange={(event) => setUseGround(event.target.checked)}
+                />
+                <span>
+                  Ground surface (CSF)
+                  <span className="check__note">grid Ã· CSF and grid Ã· CSFÂ²</span>
+                </span>
+              </label>
+              {effectiveGround ? (
+                <div className="field-row">
+                  <Field
+                    label="Mean elevation"
+                    htmlFor={meanElevationId}
+                    unit="m"
+                    hint="Ellipsoidal height used by the elevation factor"
+                  >
+                    <input
+                      id={meanElevationId}
+                      className="input"
+                      type="text"
+                      inputMode="decimal"
+                      value={meanElevationText}
+                      onChange={(event) => setMeanElevationText(event.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label="CSF override"
+                    htmlFor={csfId}
+                    unit="optional"
+                    hint="User-supplied combined scale factor"
+                  >
+                    <input
+                      id={csfId}
+                      className="input"
+                      type="text"
+                      inputMode="decimal"
+                      value={csfOverrideText}
+                      placeholder="0.999600"
+                      aria-invalid={csfInvalid || undefined}
+                      onChange={(event) => setCsfOverrideText(event.target.value)}
+                    />
+                  </Field>
+                </div>
+              ) : null}
+              {csfInvalid ? <Notice tone="err">CSF override must be between 0.5 and 2.</Notice> : null}
+              {!geographicAvailability ? (
+                <Notice tone="info">
+                  Local X/Y has no geographic reference, so only the grid surface can be calculated.
+                </Notice>
+              ) : null}
+              {result ? (
+                <div className="formula">
+                  <p className="formula__name">Combined scale factor</p>
+                  <p className="formula__body">
+                    CSF = k Â· EF &nbsp;Â·&nbsp; k = kâ‚€(1 + xÂ²/2RÂ²) &nbsp;Â·&nbsp; EF = a/(a+h)
+                  </p>
+                  <p className="formula__note">
+                    kâ‚€ = 0.9996, x = meanE âˆ’ 500 000 m, R = âˆš(MÂ·N) at the centroid latitude. Ground
+                    distance = grid Ã· CSF; ground area = grid Ã· CSFÂ².{' '}
+                    {result.csf === null
+                      ? 'CSF is not applicable for this input.'
+                      : `Computed CSF ${fmtNumber(result.csf, 8)}.`}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </details>
+        </div>
+
+        {/* ----------------------------------------------------------- hero */}
+        <div className="tool-stage__hero">
+          {mode === 'latlon' ? (
+            <Panel
+              className="stage-panel stage-panel--map"
+              title="Parcel map"
+              meta={`${fmtNumber(geoPoints.length, 0)} corners Â· click the map to add`}
+              actions={
+                <Toolbar label="Map actions">
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--quiet"
+                    onClick={fitMap}
+                    disabled={geoPoints.length === 0}
+                  >
+                    Fit
+                  </button>
+                </Toolbar>
+              }
+            >
+              <div className="stage-hero">
+                <MapCanvas
+                  mode="polygon"
+                  center={MAP_DEFAULT_VIEW.center}
+                  zoom={MAP_DEFAULT_VIEW.zoom}
+                  markers={mapMarkers}
+                  polygon={mapPolygon}
+                  line={mapLine}
+                  onMapClick={handleMapClick}
+                  onMapError={setMapError}
+                  onBasemapChange={handleBasemap}
+                  onReady={handleMapReady}
+                  ariaLabel="Parcel map: click the map to add corners in ring order"
+                >
+                  <div className="map-overlay map-overlay--tl">
+                    <p className="map-hint">
+                      <strong>Click the map to add corners</strong> in ring order â€” at least three. Zoom
+                      in to see plots and boundaries. The ring closes from the last corner back to the
+                      first.
+                    </p>
+                  </div>
+                </MapCanvas>
               </div>
+              {mapError ? (
+                <Notice tone="warn" title="Map unavailable">
+                  {mapError} The editable corner table and the calculation still work â€” the parcel can be
+                  entered, calculated and exported without the basemap.
+                </Notice>
+              ) : null}
+            </Panel>
+          ) : (
+            <Panel
+              className="stage-panel"
+              title={mode === 'xy' ? 'Coordinate sheet' : 'Grid coordinate sheet'}
+              meta={mode === 'xy' ? 'local X/Y Â· metres' : `UTM ${zoneText}${hemisphere} Â· metres`}
+              tight
+            >
+              <div className="stage-hero stage-hero--plot">
+                <PlotSurface
+                  vertices={plotVertices.map((vertex, index) => ({
+                    ...vertex,
+                    label: fmtNumber(index + 1, 0),
+                  }))}
+                  centroid={centroidGrid ? { x: centroidGrid.E, y: centroidGrid.N } : null}
+                  legDistances={plotLegDistances}
+                  areaM2={result?.grid.area ?? null}
+                  perimeterM={result?.grid.perimeter ?? null}
+                  axisLabels={mode === 'xy' ? { x: 'X (m)', y: 'Y (m)' } : { x: 'E (m)', y: 'N (m)' }}
+                  northLabel={mode === 'xy' ? 'Y' : 'N'}
+                  title={mode === 'xy' ? 'Local grid plot' : 'UTM grid plot'}
+                />
+              </div>
+            </Panel>
+          )}
+        </div>
+      </div>
+
+      {/* -------------------------------------------------------------- results */}
+      <div className="tool-results">
+        <Panel
+          title="3 Â· Read the result"
+          meta={headline ? `${fmtNumber(result?.vertexCount ?? 0, 0)} corners Â· ${headlineLabel} area` : 'Awaiting calculation'}
+          actions={
+            <Toolbar label="Export results">
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => void runExport('csv')}
+                disabled={!result || exporting !== null}
+              >
+                <IconDownload size={14} /> {exporting === 'csv' ? 'CSVâ€¦' : 'CSV'}
+              </button>
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => void runExport('json')}
+                disabled={!result || exporting !== null}
+              >
+                <IconDownload size={14} /> {exporting === 'json' ? 'JSONâ€¦' : 'JSON'}
+              </button>
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => void runExport('pdf')}
+                disabled={!result || exporting !== null}
+              >
+                <IconDownload size={14} /> {exporting === 'pdf' ? 'PDFâ€¦' : 'PDF'}
+              </button>
+            </Toolbar>
+          }
+          footer={
+            <span className="panel__meta">
+              {result
+                ? `Grid ${fmtNumber(result.grid.area, 2)} mÂ²${result.geodesic ? ` Â· geodesic ${fmtNumber(result.geodesic.area, 2)} mÂ²` : ''}${result.ground ? ` Â· ground ${fmtNumber(result.ground.area, 2)} mÂ²` : ''}`
+                : 'Reference system Â· WGS 84 Â· all calculations are client-side'}
+            </span>
+          }
+        >
+          {headline ? (
+            <>
+              <div className="result-line">
+                <p className="result-line__text">{polygonSentence(headline.area)}</p>
+                <div className="unit-chips">
+                  <span className="unit-chip unit-chip--accent">
+                    <strong>{fmtNumber(headline.area / 10000, 2)} hectares</strong>
+                  </span>
+                  <span className="unit-chip">
+                    <strong>{fmtNumber(convertArea(headline.area, 'm2', 'acres'), 2)} acres</strong>
+                  </span>
+                  <span className="unit-chip">
+                    <strong>{fmtNumber(headline.area, 0)} mÂ²</strong> square metres
+                  </span>
+                  <span className="unit-chip">
+                    <strong>{fmtNumber(convertArea(headline.area, 'm2', 'roods'), 1)} roods</strong> on
+                    older deeds
+                  </span>
+                  <span className="unit-chip">
+                    <strong>{fmtNumber(headline.perimeter, 0)} m</strong> around the boundary
+                  </span>
+                </div>
+              </div>
+              {result?.selfIntersecting ? (
+                <Notice tone="err" title="The boundary crosses itself">
+                  The corners are in a bow-tie order. A survey cannot use a self-intersecting parcel â€”
+                  reorder or move the crossing corners. Areas are still shown for diagnosis.
+                </Notice>
+              ) : null}
+              {result && result.warnings.length > 0 ? (
+                <div className="stack stack--sm">
+                  {result.warnings.map((warning, index) => (
+                    <Notice key={`warning-${index}`} tone="warn">
+                      {warning}
+                    </Notice>
+                  ))}
+                </div>
+              ) : null}
               <p className="tool-hint">
-                The ring closes automatically from the last vertex back to the first — do not repeat
-                the first vertex. Current order:{' '}
-                {mode === 'xy' ? 'X, Y' : mode === 'utm' ? 'E, N' : 'Lon, Lat'}.
+                Headline area is the {headlineLabel} surface. Every surface is listed below, with the
+                closure, centroid and scale factors in Technical details.
               </p>
             </>
+          ) : (
+            <EmptyState icon={<IconGrid size={22} />} title="No area yet">
+              {mode === 'latlon'
+                ? 'Click at least three corners on the map, then press Calculate area.'
+                : 'Add at least three corners in the table or paste a coordinate list, then press Calculate area.'}
+            </EmptyState>
           )}
+          {exportError ? <Notice tone="err">{exportError}</Notice> : null}
         </Panel>
 
         {result ? (
@@ -1485,120 +1588,136 @@ export default function PolygonTool() {
               {surfaceCard('ground', 'Ground', 'default')}
             </div>
 
-            <Panel title="Ring diagnostics" meta={`${fmtNumber(result.vertexCount, 0)} vertices`}>
-              <ReadoutGrid label="Closure, centroid and scale factors">
-                <Readout
-                  label="Closure (last → first)"
-                  value={fmtNumber(result.closure, 3)}
-                  unit="m"
-                  delta="auto-close leg"
-                />
-                <Readout label="UTM zone" value={zoneLabel} delta={result.zoneAuto ? 'auto from centroid' : 'user supplied'} />
-                <Readout
-                  label="Centroid E"
-                  value={centroidGrid ? fmtNumber(centroidGrid.E, 3) : '—'}
-                  unit={centroidGrid ? 'm' : undefined}
-                />
-                <Readout
-                  label="Centroid N"
-                  value={centroidGrid ? fmtNumber(centroidGrid.N, 3) : '—'}
-                  unit={centroidGrid ? 'm' : undefined}
-                />
-                {centroidGeo ? (
-                  <>
-                    <Readout
-                      label="Centroid longitude"
-                      value={formatDD(centroidGeo.lon, 6, 'lon')}
-                      delta={formatDMS(centroidGeo.lon, 3, 'lon')}
-                    />
-                    <Readout
-                      label="Centroid latitude"
-                      value={formatDD(centroidGeo.lat, 6, 'lat')}
-                      delta={formatDMS(centroidGeo.lat, 3, 'lat')}
-                    />
-                  </>
-                ) : null}
-                <Readout
-                  label="Projection scale factor k"
-                  value={result.projectScaleFactor === null ? '—' : fmtNumber(result.projectScaleFactor, 8)}
-                  delta="k = k₀(1 + x²/2R²)"
-                />
-                <Readout
-                  label="Elevation factor"
-                  value={result.elevationFactor === null ? '—' : fmtNumber(result.elevationFactor, 8)}
-                  delta="EF = a/(a+h)"
-                />
-                <Readout
-                  label="CSF"
-                  value={result.csf === null ? '—' : fmtNumber(result.csf, 8)}
-                  delta={csfOverride !== null ? 'user override' : 'k × EF'}
-                />
-              </ReadoutGrid>
-              {result.selfIntersecting ? (
-                <Notice tone="err" title="Self-intersecting ring">
-                  The boundary crosses itself (bow-tie). Grid/geodesic/ground areas are still shown
-                  for diagnosis, but a survey cannot use a self-intersecting parcel — reorder or move
-                  the crossing vertices.
-                </Notice>
-              ) : null}
-              {result.warnings.length > 0 ? (
-                <div className="stack stack--sm">
-                  {result.warnings.map((warning, index) => (
-                    <Notice key={`warning-${index}`} tone="warn">
-                      {warning}
-                    </Notice>
-                  ))}
-                </div>
-              ) : null}
-              {exportError ? <Notice tone="err">{exportError}</Notice> : null}
-              <div className="btn-row">
-                <button type="button" className="btn btn--sm" onClick={() => void runExport('csv')} disabled={exporting !== null}>
-                  <IconDownload size={14} /> {exporting === 'csv' ? 'CSV…' : 'CSV'}
-                </button>
-                <button type="button" className="btn btn--sm" onClick={() => void runExport('json')} disabled={exporting !== null}>
-                  <IconDownload size={14} /> {exporting === 'json' ? 'JSON…' : 'JSON'}
-                </button>
-                <button type="button" className="btn btn--sm" onClick={() => void runExport('pdf')} disabled={exporting !== null}>
-                  <IconDownload size={14} /> {exporting === 'pdf' ? 'PDF…' : 'PDF'}
-                </button>
-              </div>
-            </Panel>
+            <details className="advanced">
+              <summary>Technical details</summary>
+              <div className="advanced__body">
+                <ReadoutGrid label="Closure, centroid and scale factors">
+                  <Readout
+                    label="Closure (last â†’ first)"
+                    value={fmtNumber(result.closure, 3)}
+                    unit="m"
+                    delta="auto-close leg"
+                  />
+                  <Readout
+                    label="UTM zone"
+                    value={zoneLabel}
+                    delta={result.zoneAuto ? 'auto from centroid' : 'user supplied'}
+                  />
+                  <Readout
+                    label="Centroid E"
+                    value={centroidGrid ? fmtNumber(centroidGrid.E, 3) : 'â€”'}
+                    unit={centroidGrid ? 'm' : undefined}
+                  />
+                  <Readout
+                    label="Centroid N"
+                    value={centroidGrid ? fmtNumber(centroidGrid.N, 3) : 'â€”'}
+                    unit={centroidGrid ? 'm' : undefined}
+                  />
+                  {centroidGeo ? (
+                    <>
+                      <Readout
+                        label="Centroid longitude"
+                        value={formatDD(centroidGeo.lon, 6, 'lon')}
+                        delta={formatDMS(centroidGeo.lon, 3, 'lon')}
+                      />
+                      <Readout
+                        label="Centroid latitude"
+                        value={formatDD(centroidGeo.lat, 6, 'lat')}
+                        delta={formatDMS(centroidGeo.lat, 3, 'lat')}
+                      />
+                    </>
+                  ) : null}
+                  <Readout
+                    label="Projection scale factor k"
+                    value={
+                      result.projectScaleFactor === null
+                        ? 'â€”'
+                        : fmtNumber(result.projectScaleFactor, 8)
+                    }
+                    delta="k = kâ‚€(1 + xÂ²/2RÂ²)"
+                  />
+                  <Readout
+                    label="Elevation factor"
+                    value={result.elevationFactor === null ? 'â€”' : fmtNumber(result.elevationFactor, 8)}
+                    delta="EF = a/(a+h)"
+                  />
+                  <Readout
+                    label="CSF"
+                    value={result.csf === null ? 'â€”' : fmtNumber(result.csf, 8)}
+                    delta={csfOverride !== null ? 'user override' : 'k Ã— EF'}
+                  />
+                </ReadoutGrid>
 
-            <Panel title="Vector legs" meta={`${fmtNumber(legRows.length, 0)} legs · auto-closed`} tight>
-              <DataTable
-                columns={legColumns}
-                rows={legRows}
-                rowKey={(row) => row.key}
-                caption="Polygon legs: grid distance, geodesic distance, ground distance, grid bearing and azimuth."
-                footer={[
-                  'Σ',
-                  '',
-                  '',
-                  fmtNumber(result.grid.perimeter, 3),
-                  result.geodesic ? fmtNumber(result.geodesic.perimeter, 3) : '—',
-                  result.ground ? fmtNumber(result.ground.perimeter, 3) : '—',
-                  '',
-                  '',
-                ]}
-                empty={<EmptyState title="No legs">Add at least three vertices and compute.</EmptyState>}
-              />
-              <p className="tool-hint">
-                Totals row: grid perimeter {fmtNumber(result.grid.perimeter, 3)} m
-                {result.geodesic ? ` · geodesic ${fmtNumber(result.geodesic.perimeter, 3)} m` : ''}
-                {result.ground ? ` · ground ${fmtNumber(result.ground.perimeter, 3)} m` : ''}. Bearings
-                are clockwise from grid north; azimuths are forward azimuths on WGS 84.
-              </p>
-            </Panel>
+                <div>
+                  <h4 className="panel__title">Vector legs</h4>
+                  <DataTable
+                    columns={legColumns}
+                    rows={legRows}
+                    rowKey={(row) => row.key}
+                    caption="Polygon legs: grid distance, geodesic distance, ground distance, grid bearing and azimuth."
+                    footer={[
+                      'Î£',
+                      '',
+                      '',
+                      fmtNumber(result.grid.perimeter, 3),
+                      result.geodesic ? fmtNumber(result.geodesic.perimeter, 3) : 'â€”',
+                      result.ground ? fmtNumber(result.ground.perimeter, 3) : 'â€”',
+                      '',
+                      '',
+                    ]}
+                    empty={<EmptyState title="No legs">Add at least three vertices and calculate.</EmptyState>}
+                  />
+                  <p className="tool-hint">
+                    Totals row: grid perimeter {fmtNumber(result.grid.perimeter, 3)} m
+                    {result.geodesic
+                      ? ` Â· geodesic ${fmtNumber(result.geodesic.perimeter, 3)} m`
+                      : ''}
+                    {result.ground ? ` Â· ground ${fmtNumber(result.ground.perimeter, 3)} m` : ''}. Bearings
+                    are clockwise from grid north; azimuths are forward azimuths on WGS 84.
+                  </p>
+                </div>
+              </div>
+            </details>
+
+            {mode === 'utm' ? (
+              <details className="advanced">
+                <summary>Map check</summary>
+                <div className="advanced__body">
+                  <div className="map-check">
+                    <MapCanvas
+                      mode="view"
+                      center={MAP_DEFAULT_VIEW.center}
+                      zoom={MAP_DEFAULT_VIEW.zoom}
+                      markers={mapMarkers}
+                      polygon={mapPolygon}
+                      line={mapLine}
+                      onMapError={setMapError}
+                      onBasemapChange={handleBasemap}
+                      onReady={handleMapReady}
+                      ariaLabel="UTM parcel overlay map"
+                    />
+                  </div>
+                  <p className="tool-hint">
+                    <strong>Grid ring projected to lon/lat</strong> with the entered zone and hemisphere.
+                    Edit E/N in the table or paste; the map is a spatial check, not an input.
+                  </p>
+                  {utmEngineReady && geoPoints.length === 0 && parsed.points.length > 0 ? (
+                    <Notice tone="warn">
+                      The ring could not be projected for the map check. Check the UTM zone and
+                      hemisphere â€” grid results are unaffected.
+                    </Notice>
+                  ) : null}
+                  {utmEngineError ? (
+                    <Notice tone="warn" title="Projection engine unavailable">
+                      {utmEngineError} Grid results for UTM and geographic input need this engine; the
+                      values already calculated remain valid, and a reload retries the download.
+                    </Notice>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
           </>
-        ) : (
-          <Panel title="Results" meta="Awaiting computation">
-            <EmptyState icon={<IconGrid size={22} />} title="No results yet">
-              Enter or click at least three vertices, then run the computation. Grid, geodesic and
-              ground surfaces appear here with closure, centroid and the per-leg vector table.
-            </EmptyState>
-            {computeError ? <Notice tone="err">{computeError}</Notice> : null}
-          </Panel>
-        )}
+        ) : null}
       </div>
     </div>
   );

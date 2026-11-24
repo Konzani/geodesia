@@ -1,9 +1,9 @@
-/* ==========================================================================
-   GEODESIA — COMPONENT LAYER
+﻿/* ==========================================================================
+   GEODESIA â€” COMPONENT LAYER
    Every class here is a brand primitive. Sections:
-     01 layout · 02 header · 03 hero · 04 buttons · 05 forms · 06 hub cards
-     07 workspace/tabs · 08 panels · 09 readouts · 10 tables · 11 badges
-     12 notices · 13 chart & map shells · 14 prose/SEO · 15 footer · 16 utils
+     01 layout Â· 02 header Â· 03 hero Â· 04 buttons Â· 05 forms Â· 06 hub cards
+     07 workspace/tabs Â· 08 panels Â· 09 readouts Â· 10 tables Â· 11 badges
+     12 notices Â· 13 chart & map shells Â· 14 prose/SEO Â· 15 footer Â· 16 utils
    ========================================================================== */
 
 /* ---------------------------------------------------------------- 01 layout */
@@ -196,7 +196,7 @@
 }
 
 .nav__ext::after {
-  content: "↗";
+  content: "â†—";
   font-size: 0.85em;
   color: var(--fg-faint);
   margin-left: 1px;
@@ -817,7 +817,7 @@
 }
 
 .launch-link::after {
-  content: "→";
+  content: "â†’";
   transition: transform var(--dur-2) var(--ease-out);
 }
 
@@ -1272,10 +1272,12 @@
 }
 
 /* -------------------------------------------------------- 13 chart and map */
+/* The map shell fills whatever box its parent gives it (tool stage, dialog,
+   inline check panel). Map chrome lives in map.css; sizing is the parent's job. */
 .map-shell {
   position: relative;
-  min-height: 340px;
-  height: clamp(340px, 46vh, 520px);
+  min-height: 0;
+  height: 100%;
   border: var(--bw-1) solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-map);
@@ -2012,7 +2014,7 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke='%230b0f0e' stroke-opacity='0.06' stroke-width='1'%3E%3Cpath d='M-20 40c40 0 40-30 80-30s40 30 80 30 40-30 80-30'/%3E%3Cpath d='M-20 80c40 0 40-30 80-30s40 30 80 30 40-30 80-30'/%3E%3Cpath d='M-20 120c40 0 40-30 80-30s40 30 80 30 40-30 80-30'/%3E%3C/g%3E%3C/svg%3E");
 }
 
-/* -------------------------------------------- 17 print (browser → paper) */
+/* -------------------------------------------- 17 print (browser â†’ paper) */
 @media print {
   .site-header,
   .site-footer,

@@ -3,9 +3,11 @@
  *
  * The pure decision logic behind `MapCanvas`'s automatic tile fallback, kept
  * separate so it can be unit-tested without a DOM or network. `MapCanvas` feeds
- * it the live tile counters after every `tileload` / `tileerror`.
+ * it the live tile counters after every `tileload` / `tileerror`, scoped to the
+ * active layer's provider chain.
  */
-import { TILE_PROVIDERS } from './basemap';
+import { BASEMAP_LAYERS, DEFAULT_BASEMAP_LAYER } from './basemap';
+import type { BasemapLayerId } from './basemap';
 
 /** Errors a provider may accumulate before it is abandoned. */
 export const TILE_ERROR_THRESHOLD = 4;
@@ -16,6 +18,11 @@ export interface TileHealth {
   loadedTiles: number;
   /** Errors accumulated since the last successfully loaded tile. */
   errorsSinceLoad: number;
+}
+
+/** Number of providers in a layer's chain (the default layer when omitted). */
+export function providerCountFor(layerId: BasemapLayerId = DEFAULT_BASEMAP_LAYER): number {
+  return BASEMAP_LAYERS[layerId].providers.length;
 }
 
 /**
@@ -30,7 +37,7 @@ export interface TileHealth {
 export function evaluateTileHealth(
   health: TileHealth,
   providerIndex: number,
-  providerCount: number = TILE_PROVIDERS.length,
+  providerCount: number = providerCountFor(),
 ): TileAction {
   if (!Number.isFinite(providerIndex) || !Number.isFinite(providerCount) || providerCount <= 0) {
     return 'fail';
@@ -47,12 +54,18 @@ export function evaluateTileHealth(
 }
 
 /** Index of the next provider in the chain (clamped to the last entry). */
-export function nextProviderIndex(providerIndex: number, providerCount: number = TILE_PROVIDERS.length): number {
+export function nextProviderIndex(
+  providerIndex: number,
+  providerCount: number = providerCountFor(),
+): number {
   if (providerCount <= 0) return 0;
   return Math.min(providerIndex + 1, providerCount - 1);
 }
 
 /** Source label for the map status line. */
-export function providerLabel(providerIndex: number): string {
-  return TILE_PROVIDERS[providerIndex]?.label ?? 'Basemap';
+export function providerLabel(
+  providerIndex: number,
+  layerId: BasemapLayerId = DEFAULT_BASEMAP_LAYER,
+): string {
+  return BASEMAP_LAYERS[layerId].providers[providerIndex]?.label ?? 'Basemap';
 }

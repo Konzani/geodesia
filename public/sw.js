@@ -1,5 +1,5 @@
-/* ==========================================================================
-   GEODESIA — SERVICE WORKER
+﻿/* ==========================================================================
+   GEODESIA â€” SERVICE WORKER
    --------------------------------------------------------------------------
    Two caches, both bounded:
 
@@ -17,7 +17,7 @@
    the browser answers from disk before the network is asked at all.
    ========================================================================== */
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const TILE_CACHE = `geodesia-tiles-${VERSION}`;
 const ASSET_CACHE = `geodesia-assets-${VERSION}`;
 const MAX_TILES = 1500;
@@ -26,6 +26,7 @@ const MAX_ASSETS = 120;
 const TILE_HOSTS = new Set([
   'geodesia-proxy.254konzani.workers.dev',
   'server.arcgisonline.com',
+  'services.arcgisonline.com',
   'basemaps.cartocdn.com',
   'a.basemaps.cartocdn.com',
   'b.basemaps.cartocdn.com',
@@ -35,6 +36,10 @@ const TILE_HOSTS = new Set([
   'a.tile.openstreetmap.org',
   'b.tile.openstreetmap.org',
   'c.tile.openstreetmap.org',
+  'tile.opentopomap.org',
+  'a.tile.opentopomap.org',
+  'b.tile.opentopomap.org',
+  'c.tile.opentopomap.org',
 ]);
 
 self.addEventListener('install', () => {
@@ -68,14 +73,14 @@ async function putBounded(cacheName, request, response, limit) {
       }
     }
   } catch {
-    /* quota or opaque failure — caching is best-effort, never fatal */
+    /* quota or opaque failure â€” caching is best-effort, never fatal */
   }
 }
 
 function isCacheable(response) {
   if (!response) return false;
   if (response.status === 200) return true;
-  // Cross-origin tiles come back as opaque responses (status 0) — still cacheable.
+  // Cross-origin tiles come back as opaque responses (status 0) â€” still cacheable.
   return response.type === 'opaque';
 }
 
