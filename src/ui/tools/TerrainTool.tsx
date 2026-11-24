@@ -269,6 +269,25 @@ export default function TerrainTool() {
     setSourceLabel('No profile yet');
   }, []);
 
+  /**
+   * Prefill a known long line so a first-time visitor sees a real profile with
+   * one click instead of having to invent coordinates. Nairobi → Naivasha runs
+   * down the Rift Valley shoulder: it climbs, drops and climbs again, which shows
+   * off every metric the panel reports.
+   */
+  const loadExample = () => {
+    const points = [
+      { lat: -1.2921, lon: 36.8219 },
+      { lat: -0.7167, lon: 36.431 },
+    ];
+    setInputMode('points');
+    setStart(points[0]);
+    setEnd(points[1]);
+    setTypedText('-1.2921, 36.8219\n-0.7167, 36.4310');
+    setTypedError(null);
+    setStatusMessage('Example loaded: Nairobi → Naivasha, about 90 km. Edit it or draw your own line.');
+  };
+
   /* ----------------------------------------------------- elevation fetch */
   useEffect(() => {
     if (inputMode === 'upload') return;
@@ -869,6 +888,13 @@ export default function TerrainTool() {
                 className="segmented--full"
               />
               <p className="tool-hint">{inputHints[inputMode]}</p>
+              {inputMode !== 'upload' ? (
+                <div className="btn-row">
+                  <button type="button" className="btn btn--sm btn--quiet" onClick={loadExample}>
+                    <IconRoute size={14} /> Try an example
+                  </button>
+                </div>
+              ) : null}
 
               {inputMode === 'upload' ? (
                 <div className="stack stack--sm">

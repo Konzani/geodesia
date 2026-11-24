@@ -1,9 +1,9 @@
-/* ==========================================================================
-   GEODESIA — INSTRUMENT LAYER (tools.css)
+﻿/* ==========================================================================
+   GEODESIA â€” INSTRUMENT LAYER (tools.css)
    --------------------------------------------------------------------------
    Scoped internals for the three instruments + hub directory only. Every
    value comes from tokens.css; the component layer (components.css) still does
-   the heavy lifting. Load after tokens.css → base.css → components.css.
+   the heavy lifting. Load after tokens.css â†’ base.css â†’ components.css.
    ========================================================================== */
 
 /* ------------------------------------------------------- primitives glue */
@@ -896,7 +896,7 @@
    --------------------------------------------------------------------------
    Every instrument is a stage + results column. The stage is a 2-column grid:
    controls take minmax(300px, 26%) and the map / coordinate sheet takes the
-   remaining ≥70% at a tall clamp(520px, 72vh, 900px). The map wrapper (not
+   remaining â‰¥70% at a tall clamp(520px, 72vh, 900px). The map wrapper (not
    `.map-shell`, which map.css owns) carries the height, so the map simply
    fills its cell. Below 900px the stage stacks and the map comes first.
    ========================================================================== */
@@ -937,13 +937,13 @@
   min-width: 0;
 }
 
-/* Map / plot hero cell — this wrapper owns the stage height. */
+/* Map / plot hero cell â€” this wrapper owns the stage height. */
 .tool-stage__hero {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  height: clamp(520px, 72vh, 900px);
+  height: clamp(520px, 76vh, 940px);
 }
 
 /* Converter-style stage: same split, natural (content) height. */
@@ -986,7 +986,7 @@
   padding: var(--s-2) var(--s-4);
 }
 
-/* The map shell (map.css: 100% × 100%) fills this flex cell. */
+/* The map shell (map.css: 100% Ã— 100%) fills this flex cell. */
 .stage-hero {
   position: relative;
   display: flex;
@@ -1009,7 +1009,7 @@
   border-radius: 0;
 }
 
-/* White coordinate sheet as the hero (Polygon Local X/Y · UTM). */
+/* White coordinate sheet as the hero (Polygon Local X/Y Â· UTM). */
 .stage-hero--plot {
   justify-content: center;
   padding: var(--s-3);
@@ -1168,7 +1168,7 @@
 }
 
 .advanced[open] > summary::after {
-  content: "–";
+  content: "â€“";
 }
 
 .advanced[open] > summary {
